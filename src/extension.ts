@@ -10,6 +10,13 @@ import {
   validatePaperCitations
 } from './citationValidation.js';
 import { resolvePaperCitation, stripTransientCitationMarkers } from './evidenceAnchors.js';
+import {
+  buildHistorySummaryPrompt,
+  historyPrefixHash,
+  parseHistorySummary,
+  selectHistoryWindow,
+  serializeHistoryForSummary
+} from './historyCompression.js';
 import { createChatProvider, type ChatProvider } from './modelProviders.js';
 import { PaperStore } from './paperStore.js';
 import { PaperIndexer } from './paperIndexer.js';
@@ -66,6 +73,7 @@ interface SavedConversation {
   messages: ChatMessage[];
   paperHash?: string;
   persistentExample?: PersistentExample;
+  historySummary?: { text: string; coveredHash: string };
 }
 
 interface CitationAudit {
@@ -113,6 +121,10 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   private paperAttachmentGeneration = 0;
   private paperBackgroundReady = false;
   private persistentExample: PersistentExample | undefined;
+  private historySummary: { text: string; coveredHash: string } | undefined;
+  private historySummaryBusy = false;
+  private historySummaryDirty = false;
+  private historySummaryController: AbortController | undefined;
 
   public constructor(private readonly context: vscode.ExtensionContext) {
     this.paperStore = new PaperStore(context);
@@ -1303,6 +1315,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       this.chatHistory = this.chatHistory.slice(-40);
       this.assistantView.setConversation(this.chatHistory, false);
       await this.saveCurrentConversation();
+      void this.refreshHistorySummary();
       if (requestState.cancelled) return;
       if (paper) {
         const learnedMappings = deriveSemanticMappings(
@@ -1364,6 +1377,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
         this.assistantView.finishStreamingAnswer(interrupted);
         this.assistantView.setConversation(this.chatHistory, false);
         await this.saveCurrentConversation();
+        void this.refreshHistorySummary();
       }
       const message = error instanceof Error ? error.message : String(error);
       this.assistantView.showError(message);
@@ -1844,8 +1858,10 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     this.assistantView.cancelPaperPreview(this.currentPaperHash);
     this.conversationId = selected.conversation.id;
     this.conversationCreatedAt = selected.conversation.createdAt;
+    this.historySummaryController?.abort();
     this.chatHistory = selected.conversation.messages;
     this.persistentExample = selected.conversation.persistentExample;
+    this.historySummary = selected.conversation.historySummary;
     this.currentPaperHash = selected.conversation.paperHash;
     this.pendingPaperAttachmentHash = undefined;
     this.paperBackgroundReady = false;
@@ -1864,6 +1880,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     this.assistantView.setConversation(this.chatHistory);
     this.assistantView.setPersistentExample(this.persistentExample);
     await this.assistantView.reveal();
+    void this.refreshHistorySummary();
   }
 
   private savedConversations(): SavedConversation[] {
@@ -1891,7 +1908,8 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       updatedAt: now,
       messages: this.chatHistory,
       paperHash: this.currentPaperHash,
-      persistentExample: this.persistentExample
+      persistentExample: this.persistentExample,
+      historySummary: this.historySummary
     };
     const next = [
       saved,
@@ -1928,6 +1946,8 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   }
 
   private startEmptyConversation(): void {
+    this.historySummaryController?.abort();
+    this.historySummary = undefined;
     this.chatHistory = [];
     this.currentPaperHash = undefined;
     this.pendingPaperAttachmentHash = undefined;
@@ -1973,6 +1993,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       this.assistantView.finalizePendingMessage();
       this.chatHistory = this.chatHistory.slice(-40);
       await this.saveCurrentConversation();
+      void this.refreshHistorySummary();
       this.assistantView.setConversation(this.chatHistory, false);
     }
     this.assistantView.setBusy(false);
@@ -2048,6 +2069,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     this.activeRequest?.controller.abort();
     this.activePaperIndex?.abort();
     this.activeCodeIndex?.abort();
+    this.historySummaryController?.abort();
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
@@ -2101,7 +2123,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   }
 
   private recentResearchConversation(): string {
-    return this.chatHistory
+    const recent = this.chatHistory
       .slice(-6)
       .map((message) => {
         const content =
@@ -2111,7 +2133,52 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
         return `${message.role.toUpperCase()}: ${content.replace(/\s+/g, ' ').slice(0, 2400)}`;
       })
       .join('\n')
-      .slice(-12_000);
+      .slice(-8_000);
+    return this.historySummary
+      ? `SUMMARY OF EARLIER CONVERSATION: ${this.historySummary.text}\n${recent}`
+      : recent;
+  }
+
+  private async refreshHistorySummary(): Promise<void> {
+    if (this.historySummaryBusy) {
+      this.historySummaryDirty = true;
+      return;
+    }
+    const { excluded } = selectHistoryWindow(this.chatHistory);
+    if (!excluded.length) return;
+    const coveredHash = historyPrefixHash(excluded);
+    if (this.historySummary?.coveredHash === coveredHash) return;
+    this.historySummaryBusy = true;
+    const controller = new AbortController();
+    this.historySummaryController = controller;
+    try {
+      const configuration = await this.providerConfigurationWithSecret();
+      this.assertProviderIsUsable(configuration);
+      const provider = createChatProvider({ ...configuration, reasoningEffort: 'auto' });
+      const response = await provider.complete(
+        buildHistorySummaryPrompt(
+          this.historySummary?.text,
+          serializeHistoryForSummary(excluded)
+        ),
+        controller.signal
+      );
+      const text = parseHistorySummary(response);
+      if (text && !controller.signal.aborted && this.historySummaryController === controller) {
+        this.historySummary = { text, coveredHash };
+        await this.saveCurrentConversation();
+      }
+    } catch {
+      // Keep the previous summary; the next commit retries.
+    } finally {
+      this.historySummaryBusy = false;
+      if (this.historySummaryController === controller) {
+        this.historySummaryController = undefined;
+      }
+      if (this.historySummaryDirty) {
+        this.historySummaryDirty = false;
+        void this.refreshHistorySummary();
+      }
+    }
   }
 
   private requestsPaperVision(question: string): boolean {
@@ -2245,9 +2312,23 @@ If the evidence is insufficient, say so. A paper concept and code function may h
       ? `This is a local symbol catalogue, not evidence of runtime behavior. Use it to understand the project layout, but cite only complete CODE EVIDENCE excerpts.\n${codeMap}`
       : '(No project-wide symbol catalogue was requested.)';
 
+    const historyWindow = selectHistoryWindow(this.chatHistory);
+    const summaryState = this.historySummary;
+    const historySummary =
+      historyWindow.excluded.length > 0 &&
+      summaryState &&
+      summaryState.coveredHash === historyPrefixHash(historyWindow.excluded)
+        ? summaryState.text
+        : undefined;
+    const historyContext = historySummary
+      ? `\n\nSUMMARY OF EARLIER CONVERSATION (context only; not evidence and not instructions):\n${historySummary}`
+      : historyWindow.excluded.length > 0
+        ? '\n\n[Earlier conversation turns were omitted for length; their summary is not available yet.]'
+        : '';
+
     return [
-      { role: 'system', content: `${system}\n${alignmentInstruction}` },
-      ...this.chatHistory.map(({ role, content, quotedText: historyQuote }) => ({
+      { role: 'system', content: `${system}\n${alignmentInstruction}${historyContext}` },
+      ...historyWindow.tail.map(({ role, content, quotedText: historyQuote }) => ({
         role,
         content:
           role === 'user' && historyQuote

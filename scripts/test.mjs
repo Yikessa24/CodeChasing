@@ -842,4 +842,84 @@ const textContent = await firstPage.getTextContent();
 assert.match(textContent.items.map((item) => item.str || '').join(' '), /Hello CodeChasing/);
 await loadingTask.destroy();
 
-console.log('agentic exploration, retrieval, citations, streaming, Markdown, and PDF tests passed');
+const historyBuild = await build({
+  entryPoints: ['src/historyCompression.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  write: false,
+  logLevel: 'silent'
+});
+const historyModule = { exports: {} };
+vm.runInNewContext(historyBuild.outputFiles[0].text, {
+  module: historyModule,
+  exports: historyModule.exports,
+  require,
+  console
+});
+const {
+  selectHistoryWindow,
+  historyPrefixHash,
+  parseHistorySummary,
+  serializeHistoryForSummary,
+  HISTORY_RAW_CHAR_BUDGET,
+  HISTORY_SUMMARY_MAX_CHARS
+} = historyModule.exports;
+
+const shortHistory = [
+  { role: 'user', content: 'hello' },
+  { role: 'assistant', content: 'hi' }
+];
+assert.deepEqual(
+  JSON.parse(JSON.stringify(selectHistoryWindow(shortHistory))),
+  { excluded: [], tail: shortHistory }
+);
+
+const longHistory = [];
+for (let index = 0; index < 12; index += 1) {
+  longHistory.push({ role: 'user', content: `question ${index} ${'x'.repeat(1500)}` });
+  longHistory.push({ role: 'assistant', content: `answer ${index} ${'y'.repeat(3000)}` });
+}
+const historyWindow = selectHistoryWindow(longHistory);
+assert.ok(historyWindow.excluded.length > 0, 'long history must exclude a prefix for summarization');
+assert.equal(historyWindow.excluded.length + historyWindow.tail.length, longHistory.length);
+assert.deepEqual(historyWindow.tail.at(-1), longHistory.at(-1), 'newest message stays raw');
+const tailCost = historyWindow.tail.reduce(
+  (total, message) => total + message.content.length + (message.quotedText?.length ?? 0),
+  0
+);
+assert.ok(tailCost <= HISTORY_RAW_CHAR_BUDGET + 2500, 'raw tail stays within the char budget');
+
+const hugeHistory = [
+  { role: 'user', content: 'a'.repeat(50_000) },
+  { role: 'assistant', content: 'b'.repeat(50_000) },
+  { role: 'user', content: 'latest question' }
+];
+const hugeWindow = selectHistoryWindow(hugeHistory);
+assert.equal(hugeWindow.tail.length, 2, 'at least the two newest messages survive');
+assert.deepEqual(hugeWindow.tail.at(-1), hugeHistory.at(-1));
+assert.ok(hugeWindow.tail[0].content.length < 50_000, 'oversized message is truncated');
+
+assert.equal(
+  historyPrefixHash(longHistory.slice(0, 4)),
+  historyPrefixHash(longHistory.slice(0, 4)),
+  'prefix hash is stable'
+);
+assert.notEqual(
+  historyPrefixHash(longHistory.slice(0, 4)),
+  historyPrefixHash(longHistory.slice(0, 5)),
+  'prefix hash changes when the prefix grows'
+);
+
+const serialized = serializeHistoryForSummary([
+  { role: 'assistant', content: 'fact [P1] and code [C2]' }
+]);
+assert.ok(
+  !serialized.includes('[P1]') && !serialized.includes('[C2]'),
+  'summary input strips transient citation markers'
+);
+
+assert.equal(parseHistorySummary('   '), undefined);
+assert.equal(parseHistorySummary('z'.repeat(9000)).length, HISTORY_SUMMARY_MAX_CHARS);
+
+console.log('agentic exploration, retrieval, citations, streaming, Markdown, history compression, and PDF tests passed');

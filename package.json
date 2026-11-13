@@ -2,7 +2,7 @@
   "name": "codechasing",
   "displayName": "CodeChasing",
   "description": "Evidence-grounded research paper and code understanding inside VS Code.",
-  "version": "0.24.3",
+  "version": "0.25.0",
   "publisher": "codechasing",
   "license": "MIT",
   "engines": {

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.25.0
+
+- Compress long conversation history: keep the newest turns raw within a char budget and summarize the excluded prefix into a running summary, merged incrementally after each answer.
+- Inject the summary as context (not evidence) into the model prompt and the exploration planner; persist it with saved conversations and restore it on resume.
+- Bound worst-case prompt history with per-message truncation protection and explicit degradation when a summary is not ready yet.
+- Add executable tests for window selection, truncation protection, prefix hashing, citation-marker stripping, and summary caps.
+
 ## 0.24.3
 
 - Detect model API error payloads and SSE error events even when the HTTP response reports success; preserve interrupted output instead of finalizing it as a complete answer.

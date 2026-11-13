@@ -1,0 +1,265 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CodeChasing — 论文与代码互证的研究助手 | 2026 Qoder 高校创造力大赛</title>
+  <meta name="description" content="CodeChasing 是一个 VS Code 扩展，让 AI 回答建立在真实可点击的论文与代码证据之上：本地 PDF 锚点提取、Agentic 自主探索、张量形状符号推导与视觉理解。2026 Qoder 高校创造力大赛参赛作品。">
+  <meta name="theme-color" content="#0d1117">
+  <meta property="og:title" content="CodeChasing — 论文与代码互证的研究助手">
+  <meta property="og:description" content="每一个 AI 引用都是真实可点击的证据锚点。2026 Qoder 高校创造力大赛参赛作品。">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到主要内容</a>
+
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#top" aria-label="CodeChasing 首页">
+        <svg class="brand-mark" width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 3.5h9.5L19 8v12.5H5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M14.5 3.5V8H19M8 11h8M8 14h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="15.5" cy="16.5" r="2.5" stroke="currentColor" stroke-width="1.6"/>
+          <path d="m17.4 18.4 2.1 2.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        </svg>
+        <span>CodeChasing</span>
+      </a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+        <span class="nav-toggle-bar" aria-hidden="true"></span>
+        <span class="sr-only">打开导航菜单</span>
+      </button>
+      <nav id="site-nav" class="site-nav" aria-label="页面导航">
+        <a href="#why">痛点与方案</a>
+        <a href="#features">核心功能</a>
+        <a href="#how">工作原理</a>
+        <a href="#engineering">技术与工程</a>
+        <a href="#get">获取作品</a>
+        <a class="btn btn-small btn-outline" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="badge">2026 Qoder 高校创造力大赛 · 参赛作品</p>
+          <h1 id="hero-title">CodeChasing</h1>
+          <p class="tagline">让论文与代码<span class="hl">互相印证</span>的 VS Code 研究助手</p>
+          <p class="lead">读论文时最怕 AI 一本正经地编造出处。CodeChasing 把引用变成真实可点击的证据锚点：论文页码与高亮坐标来自本地 PDF 提取，代码位置来自编辑器选区与符号扫描——回答里的每一个 <code>[P…]</code> 和 <code>[C…]</code> 都能跳回原文。</p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">查看 GitHub 仓库</a>
+            <a class="btn btn-ghost" href="#how">了解工作原理</a>
+          </div>
+          <dl class="stats">
+            <div><dt>发布版本</dt><dd>45</dd></div>
+            <div><dt>核心能力</dt><dd>6 项</dd></div>
+            <div><dt>源码规模</dt><dd>1 万+ 行</dd></div>
+            <div><dt>模型协议</dt><dd>3 种</dd></div>
+          </dl>
+        </div>
+
+        <figure class="answer-card reveal" aria-label="引用效果示意">
+          <figcaption class="answer-card-label">引用效果示意</figcaption>
+          <div class="chat-q">
+            <span class="chat-role">提问</span>
+            <p>论文里的缩放点积注意力，对应实现中的哪一步？</p>
+          </div>
+          <div class="chat-a">
+            <span class="chat-role">CodeChasing</span>
+            <p>论文在 softmax 之前除以 √d<sub>k</sub>，防止点积过大导致梯度消失<a class="cite cite-paper" href="#how">P1</a>。实现中对应 <code>scale = 1 / math.sqrt(d_k)</code>，作用于 <code>matmul</code> 之后、softmax 之前<a class="cite cite-code" href="#how">C1</a>。</p>
+            <div class="cite-row">
+              <span class="cite-chip cite-paper"><span class="cite-id">P1</span>论文 p.3 · §3.2.1 · 高亮区域</span>
+              <span class="cite-chip cite-code"><span class="cite-id">C1</span>src/attention.py · L42–68</span>
+            </div>
+          </div>
+          <p class="answer-card-note">点击引用即可跳回论文高亮区域或代码行范围；无效引用在展示前已被移除。</p>
+        </figure>
+      </div>
+    </section>
+
+    <section id="why" class="section" aria-labelledby="why-title">
+      <div class="container">
+        <h2 id="why-title" class="reveal">为什么做 CodeChasing</h2>
+        <p class="section-lead reveal">复现一篇论文，意味着在 PDF 和编辑器之间反复横跳，还要时刻怀疑 AI 给出的页码和行号是不是编的。</p>
+        <div class="compare-grid">
+          <article class="card card-muted reveal">
+            <h3>用通用 AI 聊天读论文</h3>
+            <ul class="list-bad">
+              <li>引用靠模型记忆生成，页码、行号可能是幻觉</li>
+              <li>论文与代码割裂在两个窗口，对照全靠手工</li>
+              <li>扫描版 PDF、架构图、公式截图无法理解</li>
+              <li>整个仓库丢进上下文，隐私与成本都失控</li>
+            </ul>
+          </article>
+          <article class="card card-accent reveal">
+            <h3>CodeChasing 的方式</h3>
+            <ul class="list-good">
+              <li>引用只允许指向本轮真实提供的证据，双重审计把关</li>
+              <li>论文 ↔ 代码双向跳转，映射关系可审核、可持久</li>
+              <li>扫描页自动 OCR，图表以页面图像交给视觉模型</li>
+              <li>索引与检索全部本地，默认不发送仓库代码</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section section-alt" aria-labelledby="features-title">
+      <div class="container">
+        <h2 id="features-title" class="reveal">核心功能</h2>
+        <p class="section-lead reveal">围绕「证据」构建的六项能力，全部在 VS Code 内完成。</p>
+        <div class="feature-grid">
+          <article class="card reveal">
+            <h3>真实可点击的引用</h3>
+            <p>论文锚点内容寻址，保存哈希、页码与高亮快照，PDF 重新处理也不会悄悄改指向；代码锚点来自编辑器选区或符号扫描。无效 ID 与冲突数字在展示前移除。</p>
+          </article>
+          <article class="card reveal">
+            <h3>Agentic 自主探索</h3>
+            <p>模型用本地 search / read 工具迭代探索代码库与整篇 PDF，默认最多 8 轮、可配置到 20 轮。只有实际读到的摘录进入回答上下文，并可被引用。</p>
+          </article>
+          <article class="card reveal">
+            <h3>论文 ↔ 代码映射图</h3>
+            <p>只从同一句话本地共引论文与代码的证据中学习映射，按工作区持久化；代码或 PDF 变更后自动标记失效，用户可逐条确认或拒绝。</p>
+          </article>
+          <article class="card reveal">
+            <h3>张量形状符号推导</h3>
+            <p>对 reshape、permute、归约、广播、Linear、Conv、Embedding、einsum 等常见操作做保守符号传播；running example 跨轮次持久保存、增量合并。</p>
+          </article>
+          <article class="card reveal">
+            <h3>视觉理解与 OCR</h3>
+            <p>准备阶段自动检测扫描页并 OCR 成可检索证据；架构图、曲线、表格、公式按页面图像发给视觉模型，回答与审计时再次附上原图。</p>
+          </article>
+          <article class="card reveal">
+            <h3>隐私优先</h3>
+            <p>PDF 提取、检索、符号扫描全部本地；API key 按提供商与端点隔离存入 SecretStorage；自主探索排除 .env、私钥与凭据文件；普通聊天默认不检索仓库代码。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section" aria-labelledby="how-title">
+      <div class="container">
+        <h2 id="how-title" class="reveal">工作原理：一条证据流水线</h2>
+        <p class="section-lead reveal">从 PDF 像素到可点击引用，每一步都在本地留下可验证的痕迹。</p>
+
+        <ol class="pipeline reveal" aria-label="证据流水线">
+          <li><span class="pipe-step">01</span><strong>本地提取</strong><span>PDF.js 文本 + 精确坐标</span></li>
+          <li><span class="pipe-step">02</span><strong>内容寻址锚点</strong><span>段落 / 标题 / 图表 / 公式</span></li>
+          <li><span class="pipe-step">03</span><strong>检索与探索</strong><span>问题驱动的有限轮次读写</span></li>
+          <li><span class="pipe-step">04</span><strong>模型回答</strong><span>仅使用本轮提供的证据</span></li>
+          <li><span class="pipe-step">05</span><strong>双重引用审计</strong><span>确定性校验 + 语义审计</span></li>
+          <li><span class="pipe-step">06</span><strong>可点击证据</strong><span>跳回论文高亮 / 代码行</span></li>
+        </ol>
+
+        <div class="how-grid">
+          <article class="card reveal">
+            <h3>1 · 本地证据准备</h3>
+            <p>导入 PDF 后在后台提取文本与高亮坐标，无需打开阅读器；语言服务器扫描工作区符号，静态分析构建带置信度分级的调用图。扫描页在此阶段完成 OCR。</p>
+          </article>
+          <article class="card reveal">
+            <h3>2 · 有界探索回答</h3>
+            <p>整篇论文请求会读取全部页面；精确章节或段落请求直接定位邻近页面。代码侧支持从选区动态扩展调用者与被调用者，跨模块追踪发现。</p>
+          </article>
+          <article class="card reveal">
+            <h3>3 · 审计后才展示</h3>
+            <p>确定性检查引用 ID、来源范围与数字一致性，可选语义审计判断引用是否真的支撑结论；审计不可用时回退确定性校验而非静默删除。缺少锚点的草稿会自动重写一次。</p>
+          </article>
+        </div>
+
+        <div class="arch-block reveal">
+          <h3>扩展架构</h3>
+          <pre class="arch"><code>VS Code extension
+├── Assistant Webview          对话界面（Markdown / KaTeX / 流式输出）
+├── PDF.js paper viewer        本地打包的阅读器与文本层
+├── PaperStore                 工作区本地论文工件
+├── RepositoryIndex            符号、行范围与静态调用图
+├── SemanticMappingStore       可审核的论文 ↔ 代码映射图
+├── Running example &amp; shapes   持久化示例与符号形状追踪
+├── Hybrid retrieval           轻量混合证据检索
+└── Provider adapters          OpenAI-compatible / Anthropic / Gemini</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section id="engineering" class="section section-alt" aria-labelledby="engineering-title">
+      <div class="container">
+        <h2 id="engineering-title" class="reveal">技术与工程</h2>
+        <p class="section-lead reveal">一个人、46 个版本——靠的是严格的发布门禁，而不是运气。</p>
+        <div class="eng-grid">
+          <article class="card reveal">
+            <h3>技术栈</h3>
+            <ul class="chip-list" aria-label="技术栈">
+              <li>TypeScript</li>
+              <li>VS Code Extension API</li>
+              <li>PDF.js 6.2.108（本地 WASM）</li>
+              <li>KaTeX（本地打包）</li>
+              <li>esbuild</li>
+              <li>Node.js 22+</li>
+            </ul>
+            <p>无 CDN 依赖，公式渲染与 PDF 解析全部离线可用；升级 PDF.js 修复了恶意 PDF 任意脚本执行的高危漏洞。</p>
+          </article>
+          <article class="card reveal">
+            <h3>模型支持</h3>
+            <ul class="chip-list" aria-label="模型协议">
+              <li>OpenAI-compatible</li>
+              <li>Anthropic</li>
+              <li>Gemini</li>
+            </ul>
+            <p>兼容 Ollama、LM Studio 等本地端点；六档推理强度按协议映射（reasoning_effort / output_config.effort / thinkingLevel）；三家协议均支持图像输入。</p>
+          </article>
+          <article class="card reveal">
+            <h3>质量门禁</h3>
+            <p>每次发布执行 <code>npm run check</code>：类型检查 + Webview 语法检查 + 回归测试 + 构建。回归场景覆盖流式中断、取消、断网、UTF-8 分片、重复提交与引用恢复；冒烟测试解析真实的多页论文。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="get" class="section section-alt" aria-labelledby="get-title">
+      <div class="container">
+        <h2 id="get-title" class="reveal">获取与体验</h2>
+        <p class="section-lead reveal">CodeChasing 是 VS Code 扩展，本站是它的展示窗口；源码与完整文档在 GitHub 公开仓库。</p>
+        <div class="get-grid">
+          <article class="card reveal">
+            <h3>环境要求</h3>
+            <ul class="chip-list" aria-label="环境要求">
+              <li>VS Code 1.101+</li>
+              <li>Node.js 22.13+</li>
+            </ul>
+            <h3>从源码运行</h3>
+            <pre class="arch"><code>git clone https://github.com/Yikessa24/CodeChasing.git
+cd CodeChasing
+npm install
+npm run check   # 类型检查 + 测试 + 构建</code></pre>
+            <p>在 VS Code 中打开目录并按 <code>F5</code>，扩展开发宿主窗口即可体验。</p>
+          </article>
+          <article class="card reveal">
+            <h3>上手四步</h3>
+            <ol class="steps">
+              <li>齿轮图标配置模型提供商、Base URL、模型与 API key，并用连接测试验证。</li>
+              <li>把 PDF 拖进对话（或点 + 上传），后台完成本地准备。</li>
+              <li>搜索图标扫描工作区符号；选中代码按 <code>Cmd/Ctrl+Alt+P</code> 提问或追踪。</li>
+              <li>点「从论文到代码」开始 guided walkthrough；点击 <code>[P…]</code> / <code>[C…]</code> 引用跳回证据。</li>
+            </ol>
+            <div class="cta-row">
+              <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">GitHub 仓库</a>
+              <a class="btn btn-ghost" href="https://github.com/Yikessa24/CodeChasing/blob/main/README.md" target="_blank" rel="noopener">README 快速上手</a>
+            </div>
+          </article>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <p>CodeChasing · MIT License · 2026 Qoder 高校创造力大赛参赛作品</p>
+      <a href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">github.com/Yikessa24/CodeChasing</a>
+    </div>
+  </footer>
+</body>
+</html>
