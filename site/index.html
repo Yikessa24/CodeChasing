@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>CodeChasing — 论文与代码互证的研究助手 | 2026 Qoder 高校创造力大赛</title>
-  <meta name="description" content="CodeChasing 是一个 VS Code 扩展，让 AI 回答建立在真实可点击的论文与代码证据之上：本地 PDF 锚点提取、Agentic 自主探索、张量形状符号推导与视觉理解。2026 Qoder 高校创造力大赛参赛作品。">
+  <meta name="description" content="CodeChasing 是一个 VS Code 扩展：论文与代码双向精准定位，用一个贯穿示例追踪数据状态与张量形状，AI 回答建立在真实可点击的证据锚点之上。2026 Qoder 高校创造力大赛参赛作品。">
   <meta name="theme-color" content="#0d1117">
   <meta property="og:title" content="CodeChasing — 论文与代码互证的研究助手">
-  <meta property="og:description" content="每一个 AI 引用都是真实可点击的证据锚点。2026 Qoder 高校创造力大赛参赛作品。">
+  <meta property="og:description" content="论文 ↔ 代码双向定位，一个例子贯穿全模型；每个引用都是真实可点击的证据锚点。2026 Qoder 高校创造力大赛参赛作品。">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="assets/favicon.svg">
   <link rel="stylesheet" href="styles.css">
@@ -49,13 +49,13 @@
           <p class="badge">2026 Qoder 高校创造力大赛 · 参赛作品</p>
           <h1 id="hero-title">CodeChasing</h1>
           <p class="tagline">让论文与代码<span class="hl">互相印证</span>的 VS Code 研究助手</p>
-          <p class="lead">读论文时最怕 AI 一本正经地编造出处。CodeChasing 把引用变成真实可点击的证据锚点：论文页码与高亮坐标来自本地 PDF 提取，代码位置来自编辑器选区与符号扫描——回答里的每一个 <code>[P…]</code> 和 <code>[C…]</code> 都能跳回原文。</p>
+          <p class="lead">对着论文读代码，最耗时间的是"对应不上"和"看不到流动"。CodeChasing 让你从论文问、定位到代码行，选中代码问、定位到论文段落，并用同一个例子追踪数据流到任意函数时的状态与张量形状；回答里的每一个 <code>[P…]</code> 和 <code>[C…]</code> 都是真实可点击的证据锚点。</p>
           <div class="cta-row">
             <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">查看 GitHub 仓库</a>
             <a class="btn btn-ghost" href="#how">了解工作原理</a>
           </div>
           <dl class="stats">
-            <div><dt>发布版本</dt><dd>45</dd></div>
+            <div><dt>发布版本</dt><dd>48</dd></div>
             <div><dt>核心能力</dt><dd>6 项</dd></div>
             <div><dt>源码规模</dt><dd>1 万+ 行</dd></div>
             <div><dt>模型协议</dt><dd>3 种</dd></div>
@@ -84,24 +84,24 @@
     <section id="why" class="section" aria-labelledby="why-title">
       <div class="container">
         <h2 id="why-title" class="reveal">为什么做 CodeChasing</h2>
-        <p class="section-lead reveal">复现一篇论文，意味着在 PDF 和编辑器之间反复横跳，还要时刻怀疑 AI 给出的页码和行号是不是编的。</p>
+        <p class="section-lead reveal">出发点是想把科研里看论文、看代码的效率提上去：对应得上、看得见流动、信得过出处。</p>
         <div class="compare-grid">
           <article class="card card-muted reveal">
             <h3>用通用 AI 聊天读论文</h3>
             <ul class="list-bad">
-              <li>引用靠模型记忆生成，页码、行号可能是幻觉</li>
-              <li>论文与代码割裂在两个窗口，对照全靠手工</li>
-              <li>扫描版 PDF、架构图、公式截图无法理解</li>
-              <li>整个仓库丢进上下文，隐私与成本都失控</li>
+              <li>对应不上：论文方法对应代码哪部分，只能一点点核对，模型常只说"可能在 model.py"</li>
+              <li>看不到流动：每次提问随机举新例子，同一份数据流遍代码的状态接不起来</li>
+              <li>信不过出处：页码、行号靠模型记忆生成，可能是幻觉</li>
+              <li>扫描版与图表无法理解，整仓丢进上下文则隐私与成本失控</li>
             </ul>
           </article>
           <article class="card card-accent reveal">
             <h3>CodeChasing 的方式</h3>
             <ul class="list-good">
-              <li>引用只允许指向本轮真实提供的证据，双重审计把关</li>
-              <li>论文 ↔ 代码双向跳转，映射关系可审核、可持久</li>
-              <li>扫描页自动 OCR，图表以页面图像交给视觉模型</li>
-              <li>索引与检索全部本地，默认不发送仓库代码</li>
+              <li>双向精准定位：论文 → 代码文件/行范围，代码 → 论文章节/段落，自动高亮</li>
+              <li>同一个例子贯穿：任意函数处追踪数据状态与张量形状，示例跨轮次持久</li>
+              <li>引用只指向本轮真实证据，双重审计，可点击跳回原文</li>
+              <li>扫描页自动 OCR、图表交给视觉模型；索引与检索全部本地</li>
             </ul>
           </article>
         </div>
@@ -126,8 +126,8 @@
             <p>只从同一句话本地共引论文与代码的证据中学习映射，按工作区持久化；代码或 PDF 变更后自动标记失效，用户可逐条确认或拒绝。</p>
           </article>
           <article class="card reveal">
-            <h3>张量形状符号推导</h3>
-            <p>对 reshape、permute、归约、广播、Linear、Conv、Embedding、einsum 等常见操作做保守符号传播；running example 跨轮次持久保存、增量合并。</p>
+            <h3>贯穿示例与张量形状</h3>
+            <p>建立一个贯穿整个模型的具体例子，无论问哪个函数都复用它：数据到这个函数时是什么状态、形状为什么从 [32, 200, 128] 变成 [32, 100, 256]。对 reshape、permute、Linear、Conv、einsum 等做保守符号传播，示例跨轮次持久、增量合并。</p>
           </article>
           <article class="card reveal">
             <h3>视觉理解与 OCR</h3>
@@ -162,7 +162,7 @@
           </article>
           <article class="card reveal">
             <h3>2 · 有界探索回答</h3>
-            <p>整篇论文请求会读取全部页面；精确章节或段落请求直接定位邻近页面。代码侧支持从选区动态扩展调用者与被调用者，跨模块追踪发现。</p>
+            <p>整篇论文请求会读取全部页面；精确章节或段落请求直接定位邻近页面。代码侧支持从选区动态扩展调用者与被调用者，跨模块追踪发现。回答默认导师式细读：为什么存在、输入是什么、逐步计算、输出去哪。</p>
           </article>
           <article class="card reveal">
             <h3>3 · 审计后才展示</h3>
@@ -228,8 +228,9 @@
             <h3>环境要求</h3>
             <ul class="chip-list" aria-label="环境要求">
               <li>VS Code 1.101+</li>
-              <li>Node.js 22.13+</li>
+              <li>Node.js 22.13+（仅源码构建）</li>
             </ul>
+            <p>推荐：从 Releases 下载安装包，扩展面板「从 VSIX 安装」即可，无需 Node.js。</p>
             <h3>从源码运行</h3>
             <pre class="arch"><code>git clone https://github.com/Yikessa24/CodeChasing.git
 cd CodeChasing
@@ -247,7 +248,7 @@ npm run check   # 类型检查 + 测试 + 构建</code></pre>
             </ol>
             <div class="cta-row">
               <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">GitHub 仓库</a>
-              <a class="btn btn-ghost" href="https://github.com/Yikessa24/CodeChasing/blob/main/README.md" target="_blank" rel="noopener">README 快速上手</a>
+              <a class="btn btn-ghost" href="https://github.com/Yikessa24/CodeChasing/blob/main/docs/judge-guide.md" target="_blank" rel="noopener">评委体验手册</a>
             </div>
           </article>
         </div>

@@ -1,6 +1,6 @@
 # CodeChasing
 
-CodeChasing is an early VS Code extension for understanding research code together with its paper. It keeps paper citations and code locations as real, clickable anchors instead of asking a model to invent page numbers or line ranges.
+CodeChasing is an early VS Code extension for understanding research code together with its paper. It keeps paper citations and code locations as real, clickable anchors instead of asking a model to invent page numbers or line ranges. It is built around the two questions researchers keep asking: which part of the code implements this part of the paper (and the reverse), and what one concrete example looks like as it flows through the whole model, tensor shapes included.
 
 **评委快速上手 / Judge walkthrough**: step-by-step Chinese guide in [docs/judge-guide.md](docs/judge-guide.md).
 
