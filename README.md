@@ -2,7 +2,7 @@
 
 CodeChasing is an early VS Code extension for understanding research code together with its paper. It keeps paper citations and code locations as real, clickable anchors instead of asking a model to invent page numbers or line ranges.
 
-This repository currently contains MVP 0.26.0:
+This repository currently contains MVP 0.27.0:
 
 - chat normally without attaching a paper or repository context;
 - import one PDF per VS Code workspace;

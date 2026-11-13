@@ -17,6 +17,7 @@ import {
   selectHistoryWindow,
   serializeHistoryForSummary
 } from './historyCompression.js';
+import { buildRerankPrompt, parseRerankOrder } from './evidenceRerank.js';
 import { createChatProvider, type ChatProvider } from './modelProviders.js';
 import { PaperStore } from './paperStore.js';
 import { PaperIndexer } from './paperIndexer.js';
@@ -948,8 +949,19 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       let evidence = paper && wantsResearchContext
         ? wantsWholePaper
           ? this.fullPaperEvidence(paper)
-          : retrieveEvidence(paperQuery, paper.chunks, maxEvidence)
+          : retrieveEvidence(paperQuery, paper.chunks, Math.min(12, maxEvidence * 2))
         : [];
+      if (!wantsWholePaper && evidence.length > maxEvidence) {
+        evidence = configuration.get<boolean>('rerankEvidence', true)
+          ? await this.rerankEvidence(
+              utilityProvider,
+              text,
+              evidence,
+              maxEvidence,
+              requestState.controller.signal
+            )
+          : evidence.slice(0, maxEvidence);
+      }
       if (paper && quotedText && !wantsWholePaper) {
         const pinned = this.evidenceBehindQuotedAnswer(
           quotedText,
@@ -2228,6 +2240,23 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       if (structural) add(structural.page);
     }
     return pages.slice(0, limit);
+  }
+
+  private async rerankEvidence(
+    provider: ChatProvider,
+    query: string,
+    candidates: EvidenceItem[],
+    limit: number,
+    signal: AbortSignal
+  ): Promise<EvidenceItem[]> {
+    try {
+      const response = await provider.complete(buildRerankPrompt(query, candidates, limit), signal);
+      const reordered = parseRerankOrder(response, candidates, limit);
+      if (reordered) return reordered;
+    } catch (error) {
+      if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+    }
+    return candidates.slice(0, limit);
   }
 
   private async extractPersistentExample(

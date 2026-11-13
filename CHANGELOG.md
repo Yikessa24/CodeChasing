@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.27.0
+
+- Re-rank retrieved paper evidence with the configured model (listwise) before answering: retrieve a 2x candidate pool, let the model order the most relevant excerpts, and keep the evidence limit.
+- Add `codeChasing.rerankEvidence` (default on) to fall back to lexical ranking only; parse failures and provider errors degrade to the lexical order, and cancellation propagates.
+- Add executable tests for rerank prompt construction, fenced/bare JSON parsing, invalid/duplicate ID filtering, limit enforcement, and lexical top-up.
+
 ## 0.26.0
 
 - Replace raw TF-IDF evidence scoring with BM25 (k1=1.2, b=0.75): saturate term frequency and normalize chunk length so long diluted chunks no longer outscore dense, citation-sized anchors.

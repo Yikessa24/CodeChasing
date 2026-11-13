@@ -936,4 +936,57 @@ assert.ok(
 assert.equal(parseHistorySummary('   '), undefined);
 assert.equal(parseHistorySummary('z'.repeat(9000)).length, HISTORY_SUMMARY_MAX_CHARS);
 
-console.log('agentic exploration, retrieval, citations, streaming, Markdown, history compression, and PDF tests passed');
+const rerankBuild = await build({
+  entryPoints: ['src/evidenceRerank.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  write: false,
+  logLevel: 'silent'
+});
+const rerankModule = { exports: {} };
+vm.runInNewContext(rerankBuild.outputFiles[0].text, {
+  module: rerankModule,
+  exports: rerankModule.exports,
+  console
+});
+const { buildRerankPrompt, parseRerankOrder } = rerankModule.exports;
+const rerankCandidates = ['P1', 'P2', 'P3'].map((citationId, index) => ({
+  id: `chunk-${index}`,
+  citationId,
+  page: index + 1,
+  text: `excerpt ${index}`,
+  boxes: [],
+  score: 3 - index
+}));
+const rerankPrompt = buildRerankPrompt('what is the loss?', rerankCandidates, 2);
+assert.ok(rerankPrompt[1].content.includes('[P2]'), 'rerank prompt lists candidate IDs');
+assert.ok(rerankPrompt[0].content.includes('at most 2'), 'rerank prompt states the limit');
+
+const fenced = parseRerankOrder(
+  '```json\n{"order":["P2","P9","P2","P1"]}\n```',
+  rerankCandidates,
+  2
+);
+assert.deepEqual(
+  [...fenced.map((item) => item.citationId)],
+  ['P2', 'P1'],
+  'invalid and duplicate IDs are dropped, limit enforced'
+);
+
+const toppedUp = parseRerankOrder('{"order":["P3"]}', rerankCandidates, 2);
+assert.deepEqual(
+  [...toppedUp.map((item) => item.citationId)],
+  ['P3', 'P1'],
+  'missing slots top up in lexical order'
+);
+
+assert.equal(parseRerankOrder('not json', rerankCandidates, 2), undefined);
+assert.equal(parseRerankOrder('{"order":[]}', rerankCandidates, 2), undefined);
+assert.deepEqual(
+  [...parseRerankOrder('["P2","P1"]', rerankCandidates, 2).map((item) => item.citationId)],
+  ['P2', 'P1'],
+  'bare arrays are accepted'
+);
+
+console.log('agentic exploration, retrieval, rerank, citations, streaming, Markdown, history compression, and PDF tests passed');
