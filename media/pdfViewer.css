@@ -1,0 +1,262 @@
+:root {
+  color-scheme: light dark;
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-foreground);
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-editor-background);
+  flex: 0 0 auto;
+}
+
+header strong {
+  min-width: 80px;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#viewer-controls {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#viewer-controls button {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 7px;
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+  border-radius: 5px;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  cursor: pointer;
+}
+
+#viewer-controls button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+#viewer-controls button:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+#zoom-label {
+  min-width: 42px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  text-align: center;
+}
+
+#status {
+  flex: 0 0 auto;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+#ask-pdf-selection {
+  position: fixed;
+  z-index: 30;
+  padding: 5px 10px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 6px;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+  cursor: pointer;
+}
+
+#ask-pdf-selection:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+#pages {
+  display: flex;
+  flex-direction: column;
+  /* Center pages only while they fit. Cross-axis centering of an oversized
+     flex item creates negative overflow that horizontal scrolling cannot reach. */
+  align-items: flex-start;
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 100%;
+  min-height: 0;
+  gap: 18px;
+  padding: 18px;
+  overflow: auto;
+}
+
+.pdf-page {
+  position: relative;
+  flex: 0 0 auto;
+  margin-inline: auto;
+  max-width: none;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
+  background: white;
+}
+
+.startup-preview {
+  position: relative;
+  flex: 0 0 auto;
+  max-width: calc(100vw - 36px);
+  margin-inline: auto;
+  overflow: hidden;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.35);
+  background: white;
+}
+
+.startup-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+@media (max-width: 560px) {
+  header {
+    flex-wrap: wrap;
+  }
+
+  header strong {
+    flex-basis: calc(100% - 90px);
+  }
+
+  #status {
+    order: 2;
+    margin-left: auto;
+  }
+}
+
+.pdf-page canvas {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  pointer-events: none;
+  user-select: none;
+}
+
+.textLayer {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: clip;
+  color-scheme: only light;
+  line-height: 1;
+  text-align: initial;
+  transform-origin: 0 0;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+  forced-color-adjust: none;
+  pointer-events: auto;
+  cursor: text;
+}
+
+.textLayer :is(span, br) {
+  position: absolute;
+  color: transparent;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0 0;
+  user-select: text;
+}
+
+.textLayer {
+  --min-font-size: 1;
+  --text-scale-factor: calc(var(--total-scale-factor) * var(--min-font-size));
+  --min-font-size-inv: calc(1 / var(--min-font-size));
+  user-select: text;
+}
+
+.textLayer > :not(.markedContent),
+.textLayer .markedContent span:not(.markedContent) {
+  z-index: 1;
+  --font-height: 0;
+  --scale-x: 1;
+  --rotate: 0deg;
+  font-size: calc(var(--text-scale-factor) * var(--font-height));
+  transform: rotate(var(--rotate)) scaleX(var(--scale-x)) scale(var(--min-font-size-inv));
+}
+
+.textLayer .markedContent {
+  display: contents;
+}
+
+.textLayer ::selection {
+  background: rgba(0, 110, 255, 0.32);
+}
+
+.textLayer .endOfContent {
+  position: absolute;
+  inset: 100% 0 0;
+  display: block;
+  cursor: default;
+  user-select: none;
+}
+
+.pdf-selection-highlight {
+  position: absolute;
+  z-index: 3;
+  background: rgba(0, 110, 255, 0.32);
+  pointer-events: none;
+}
+
+.page-label {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  color: #555;
+  background: rgba(255, 255, 255, 0.78);
+  font-size: 10px;
+  z-index: 4;
+  user-select: none;
+}
+
+.evidence-highlight {
+  position: absolute;
+  z-index: 2;
+  border: 1px solid rgba(255, 178, 0, 0.9);
+  border-radius: 2px;
+  background: rgba(255, 208, 0, 0.32);
+  pointer-events: none;
+  animation: evidence-pulse 0.8s ease-out;
+}
+
+@keyframes evidence-pulse {
+  from {
+    background: rgba(255, 147, 0, 0.72);
+  }
+  to {
+    background: rgba(255, 208, 0, 0.32);
+  }
+}

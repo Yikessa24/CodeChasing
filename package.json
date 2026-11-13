@@ -1,0 +1,231 @@
+{
+  "name": "codechasing",
+  "displayName": "CodeChasing",
+  "description": "Evidence-grounded research paper and code understanding inside VS Code.",
+  "version": "0.24.3",
+  "publisher": "codechasing",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "files": [
+    "dist/**",
+    "media/**",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeChasing.importPaper",
+        "title": "CodeChasing: Import Research Paper"
+      },
+      {
+        "command": "codeChasing.openPaper",
+        "title": "CodeChasing: Open Current Paper"
+      },
+      {
+        "command": "codeChasing.askPaper",
+        "title": "CodeChasing: Ask About Paper and Code"
+      },
+      {
+        "command": "codeChasing.analyzeSelection",
+        "title": "CodeChasing: Ask or Trace Selected Code",
+        "shortTitle": "Ask selected code",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "codeChasing.indexWorkspace",
+        "title": "CodeChasing: Index Workspace Symbols"
+      },
+      {
+        "command": "codeChasing.openCallGraph",
+        "title": "CodeChasing: Open Project Call Graph"
+      },
+      {
+        "command": "codeChasing.manageMappings",
+        "title": "CodeChasing: Review Paper-Code Mappings"
+      },
+      {
+        "command": "codeChasing.showPersistentExample",
+        "title": "CodeChasing: View Running Example and Tensor Trace"
+      },
+      {
+        "command": "codeChasing.configureProvider",
+        "title": "CodeChasing: Configure Model Provider"
+      },
+      {
+        "command": "codeChasing.testProvider",
+        "title": "CodeChasing: Test Model Connection"
+      },
+      {
+        "command": "codeChasing.moveToRight",
+        "title": "CodeChasing: Move Assistant to Right Side"
+      },
+      {
+        "command": "codeChasing.startWalkthrough",
+        "title": "CodeChasing: Explain Paper and Code from Start to Finish"
+      },
+      {
+        "command": "codeChasing.manageIndexes",
+        "title": "CodeChasing: Manage Paper and Code Indexes"
+      },
+      {
+        "command": "codeChasing.openConversationHistory",
+        "title": "CodeChasing: Open Conversation History"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "codeChasing.analyzeSelection",
+          "when": "editorHasSelection && resourceScheme == file",
+          "group": "navigation@100"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "codeChasing.analyzeSelection",
+          "when": "editorHasSelection",
+          "group": "navigation@50"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "codeChasing.analyzeSelection",
+        "key": "ctrl+alt+p",
+        "mac": "cmd+alt+p",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "codeChasing",
+          "title": "CodeChasing",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "codeChasing": [
+        {
+          "type": "webview",
+          "id": "codeChasing.assistant",
+          "name": "Research Assistant"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "CodeChasing",
+      "properties": {
+        "codeChasing.provider": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "anthropic",
+            "gemini"
+          ],
+          "default": "openai-compatible",
+          "description": "Model API protocol. Ollama and LM Studio use openai-compatible."
+        },
+        "codeChasing.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "Base URL for the selected model provider."
+        },
+        "codeChasing.model": {
+          "type": "string",
+          "default": "gpt-4.1-mini",
+          "description": "Model name sent to the provider."
+        },
+        "codeChasing.reasoningEffort": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
+          ],
+          "enumDescriptions": [
+            "Let the provider or model choose its default reasoning effort.",
+            "Use the smallest supported reasoning effort.",
+            "Prefer lower latency and cost.",
+            "Balance reasoning depth, latency, and cost.",
+            "Prefer deeper reasoning.",
+            "Use extra-high reasoning where the model supports it."
+          ],
+          "default": "auto",
+          "description": "Reasoning effort sent to compatible models. Unsupported explicit values may be rejected by the provider."
+        },
+        "codeChasing.maxRepositoryFiles": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 10,
+          "maximum": 20000,
+          "description": "Maximum source files included in the initial symbol scan and compact catalogue. Model-directed text search can still inspect all non-dependency workspace files."
+        },
+        "codeChasing.maxEvidenceChunks": {
+          "type": "number",
+          "default": 6,
+          "minimum": 2,
+          "maximum": 12,
+          "description": "Maximum paper evidence chunks sent with each question."
+        },
+        "codeChasing.maxExplorationRounds": {
+          "type": "number",
+          "default": 8,
+          "minimum": 1,
+          "maximum": 20,
+          "description": "Maximum model-directed search/read rounds before an answer. Increase this for unusually large or cross-module research questions."
+        },
+        "codeChasing.maxVisualPages": {
+          "type": "number",
+          "default": 6,
+          "minimum": 1,
+          "maximum": 12,
+          "description": "Maximum PDF page images sent for one visual paper question or guided walkthrough."
+        },
+        "codeChasing.sendCodeByDefault": {
+          "type": "boolean",
+          "default": false,
+          "description": "Retrieve related repository code for ordinary chat. Explicit code questions and selected editor code may still retrieve relevant code when this is disabled."
+        },
+        "codeChasing.confirmContextBeforeSend": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a paper/code context confirmation before each contextual request. Disabled by default for uninterrupted chat."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/test.mjs && node scripts/test-stability.mjs",
+    "check:webviews": "node --check media/assistant.js && node --check media/pdfViewer.js",
+    "check": "npm run typecheck && npm run check:webviews && npm run test && npm run compile",
+    "vscode:prepublish": "npm run check"
+  },
+  "dependencies": {
+    "katex": "0.16.22",
+    "pdfjs-dist": "6.2.108"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0"
+  }
+}
