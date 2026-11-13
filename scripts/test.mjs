@@ -387,6 +387,20 @@ assert.equal(bilingual[0]?.id, 'experiment-en');
 const fallback = retrieveEvidence('unmatched-token', chunks, 1);
 assert.equal(fallback.length, 1);
 
+const longChunkBias = retrieveEvidence(
+  'loss',
+  [
+    { id: 'short', page: 1, text: 'loss loss', boxes: [] },
+    { id: 'long', page: 2, text: `loss loss loss ${'filler '.repeat(600)}`, boxes: [] }
+  ],
+  2
+);
+assert.equal(
+  longChunkBias[0]?.id,
+  'short',
+  'BM25 length normalization must prefer the dense short chunk over a diluted long one'
+);
+
 const chunkingBuild = await build({
   entryPoints: ['src/paperChunking.ts'],
   bundle: true,

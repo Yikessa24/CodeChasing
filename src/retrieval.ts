@@ -77,18 +77,22 @@ export function retrieveEvidence(
     documentFrequency.set(token, frequency);
   }
 
+  const averageLength =
+    chunks.reduce((total, chunk) => total + chunk.text.length, 0) / chunks.length || 1;
   const ranked = chunks
     .map((chunk) => {
       const lowered = chunk.text.toLowerCase();
       let score = loweredQuery.length > 3 && lowered.includes(loweredQuery) ? 12 : 0;
+      // BM25 (k1=1.2, b=0.75): saturate tf and normalize chunk length so long chunks no longer outscore dense anchors.
+      const lengthNorm = 0.25 + 0.75 * (lowered.length / averageLength);
       for (const token of tokens) {
         const tf = termFrequency(lowered, token);
         if (tf === 0) {
           continue;
         }
         const df = documentFrequency.get(token) ?? 0;
-        const idf = Math.log((chunks.length + 1) / (df + 1)) + 1;
-        score += (1 + Math.log(tf)) * idf * Math.min(3, token.length);
+        const idf = Math.log(1 + (chunks.length - df + 0.5) / (df + 0.5));
+        score += ((tf * 2.2) / (tf + 1.2 * lengthNorm)) * idf * Math.min(3, token.length);
       }
       if (/公式|方程|等式|formula|equation|\beq\b/i.test(query) && chunk.kind === 'formula') score += 18;
       if (/图表|架构图|figure|diagram/i.test(query) && chunk.kind === 'figure') score += 14;

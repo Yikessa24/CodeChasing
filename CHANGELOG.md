@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.26.0
+
+- Replace raw TF-IDF evidence scoring with BM25 (k1=1.2, b=0.75): saturate term frequency and normalize chunk length so long diluted chunks no longer outscore dense, citation-sized anchors.
+- Use the standard BM25 inverse-document-frequency term while keeping bilingual token expansion, kind boosts, and the structural fallback.
+- Add a regression test proving a dense short chunk outranks a diluted long chunk with higher raw term frequency.
+
 ## 0.25.0
 
 - Compress long conversation history: keep the newest turns raw within a char budget and summarize the excluded prefix into a running summary, merged incrementally after each answer.
