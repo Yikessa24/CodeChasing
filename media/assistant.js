@@ -1138,9 +1138,12 @@ window.addEventListener('message', (event) => {
             message.model.insecureTransport ? ' · HTTP insecure' : ''
           }`
         : 'Not configured';
-      document.getElementById('reasoning-label').textContent = message.model
-        ? message.model.reasoningEffort
-        : 'Auto';
+      const modelLabel = document.getElementById('model-label');
+      if (modelLabel) {
+        modelLabel.textContent = message.model
+          ? `${message.model.name} · ${message.model.reasoningEffort}`
+          : '未配置';
+      }
       updateContextSummary();
       break;
     case 'mappingStatus': {

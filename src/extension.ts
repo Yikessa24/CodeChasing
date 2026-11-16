@@ -18,7 +18,12 @@ import {
   serializeHistoryForSummary
 } from './historyCompression.js';
 import { buildRerankPrompt, parseRerankOrder } from './evidenceRerank.js';
-import { createChatProvider, type ChatProvider } from './modelProviders.js';
+import {
+  createChatProvider,
+  listProviderModels,
+  providerModelExists,
+  type ChatProvider
+} from './modelProviders.js';
 import { PaperStore } from './paperStore.js';
 import { PaperIndexer } from './paperIndexer.js';
 import {
@@ -768,28 +773,92 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     );
   }
 
-  public async configureReasoningEffort(): Promise<void> {
+  public async configureModel(): Promise<void> {
     const current = this.providerConfiguration();
-    const reasoning = await vscode.window.showQuickPick(
-      [
-        { label: 'Auto', description: 'Use the model/provider default', value: 'auto' as const },
-        { label: 'Minimal', description: 'Fastest supported reasoning', value: 'minimal' as const },
-        { label: 'Low', description: 'Lower latency and cost', value: 'low' as const },
-        { label: 'Medium', description: 'Balanced reasoning', value: 'medium' as const },
-        { label: 'High', description: 'Deeper reasoning', value: 'high' as const },
-        { label: 'Extra high', description: 'Only for models that support xhigh', value: 'xhigh' as const }
-      ],
+    const withSecret = await this.providerConfigurationWithSecret();
+    const remote = await listProviderModels(withSecret);
+    const configured = vscode.workspace
+      .getConfiguration('codeChasing')
+      .get<string[]>('modelChoices', []);
+    const names = [
+      ...new Set([
+        current.model,
+        ...remote,
+        ...configured.filter((name) => typeof name === 'string' && name.trim())
+      ])
+    ];
+    const available = new Set(names);
+    const efforts: Array<{ label: string; value: ReasoningEffort }> = [
+      { label: 'Auto', value: 'auto' },
+      { label: 'Minimal', value: 'minimal' },
+      { label: 'Low', value: 'low' },
+      { label: 'Medium', value: 'medium' },
+      { label: 'High', value: 'high' },
+      { label: 'Extra high', value: 'xhigh' }
+    ];
+    const items: Array<vscode.QuickPickItem & { value?: string }> = [
+      { label: '模型', kind: vscode.QuickPickItemKind.Separator },
+      ...names.map((name) => ({
+        label: name,
+        description: name === current.model ? '当前模型' : '',
+        value: `model:${name}`
+      })),
       {
-        title: 'Reasoning effort',
-        placeHolder: `Current: ${current.reasoningEffort}`
-      }
-    );
-    if (!reasoning) {
+        label: '$(edit) 手动输入模型名…',
+        description: '会先校验是否存在',
+        value: '__manual__'
+      },
+      { label: '推理强度', kind: vscode.QuickPickItemKind.Separator },
+      ...efforts.map((effort) => ({
+        label: effort.label,
+        description: effort.value === current.reasoningEffort ? '当前强度' : '',
+        value: `effort:${effort.value}`
+      }))
+    ];
+    const picked = await vscode.window.showQuickPick(items, {
+      title: '选择模型与推理强度',
+      placeHolder: `当前: ${current.model} · ${current.reasoningEffort}`
+    });
+    if (!picked?.value) {
       return;
     }
-    await vscode.workspace
-      .getConfiguration('codeChasing')
-      .update('reasoningEffort', reasoning.value, vscode.ConfigurationTarget.Global);
+    const configuration = vscode.workspace.getConfiguration('codeChasing');
+    if (picked.value === '__manual__') {
+      const entered = await vscode.window.showInputBox({
+        title: '模型名',
+        value: current.model,
+        ignoreFocusOut: true,
+        validateInput: (value) => (value.trim() ? undefined : 'Model name is required.')
+      });
+      const name = entered?.trim();
+      if (!name) {
+        return;
+      }
+      if (!available.has(name)) {
+        const verdict = await providerModelExists(withSecret, name);
+        if (verdict !== 'exists') {
+          void vscode.window.showErrorMessage(
+            verdict === 'missing'
+              ? `模型 ${name} 不存在于当前提供商，未切换。`
+              : `无法确认模型 ${name} 是否可用，未切换；请从列表选择或先测试连接。`
+          );
+          return;
+        }
+      }
+      await configuration.update('model', name, vscode.ConfigurationTarget.Global);
+    } else if (picked.value.startsWith('model:')) {
+      await configuration.update(
+        'model',
+        picked.value.slice(6),
+        vscode.ConfigurationTarget.Global
+      );
+    } else if (picked.value.startsWith('effort:')) {
+      await configuration.update(
+        'reasoningEffort',
+        picked.value.slice(7),
+        vscode.ConfigurationTarget.Global
+      );
+    }
     this.assistantView.setModelStatus(await this.providerConfigurationWithSecret());
   }
 

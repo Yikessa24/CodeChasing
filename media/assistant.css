@@ -721,14 +721,21 @@ textarea:focus {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-.reasoning-button {
+.model-button {
   width: auto;
   min-width: 48px;
+  max-width: 220px;
   gap: 4px;
   padding: 0 6px;
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
-  text-transform: capitalize;
+}
+
+.model-button #model-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
 }
 
 .keyboard-hint {

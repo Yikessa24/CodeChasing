@@ -451,3 +451,67 @@ export function createChatProvider(config: ProviderConfig): ChatProvider {
       return new OpenAICompatibleProvider(config);
   }
 }
+
+export async function listProviderModels(config: ProviderConfig): Promise<string[]> {
+  const base = trimTrailingSlash(config.baseUrl);
+  const headers: Record<string, string> = {};
+  let url: string;
+  if (config.provider === 'gemini') {
+    if (!config.apiKey) return [];
+    url = `${base}/v1beta/models?key=${encodeURIComponent(config.apiKey)}`;
+  } else if (config.provider === 'anthropic') {
+    if (!config.apiKey) return [];
+    url = `${base}/v1/models`;
+    headers['x-api-key'] = config.apiKey;
+    headers.authorization = `Bearer ${config.apiKey}`;
+    headers['anthropic-version'] = '2023-06-01';
+  } else {
+    url = `${base}/models`;
+    if (config.apiKey) headers.authorization = `Bearer ${config.apiKey}`;
+  }
+  try {
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return [];
+    const data = (await response.json()) as {
+      data?: Array<{ id?: string }>;
+      models?: Array<{ name?: string }>;
+    };
+    const ids =
+      config.provider === 'gemini'
+        ? (data.models ?? []).map((model) => (model.name ?? '').replace(/^models\//, ''))
+        : (data.data ?? []).map((model) => model.id ?? '');
+    return [...new Set(ids.filter((id) => id.trim()))];
+  } catch {
+    return [];
+  }
+}
+
+export async function providerModelExists(
+  config: ProviderConfig,
+  model: string
+): Promise<'exists' | 'missing' | 'unknown'> {
+  const base = trimTrailingSlash(config.baseUrl);
+  const headers: Record<string, string> = {};
+  let url: string;
+  if (config.provider === 'gemini') {
+    if (!config.apiKey) return 'unknown';
+    url = `${base}/v1beta/models/${encodeURIComponent(model)}?key=${encodeURIComponent(config.apiKey)}`;
+  } else if (config.provider === 'anthropic') {
+    if (!config.apiKey) return 'unknown';
+    url = `${base}/v1/models/${encodeURIComponent(model)}`;
+    headers['x-api-key'] = config.apiKey;
+    headers.authorization = `Bearer ${config.apiKey}`;
+    headers['anthropic-version'] = '2023-06-01';
+  } else {
+    url = `${base}/models/${encodeURIComponent(model)}`;
+    if (config.apiKey) headers.authorization = `Bearer ${config.apiKey}`;
+  }
+  try {
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(8000) });
+    if (response.ok) return 'exists';
+    if (response.status === 404) return 'missing';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}

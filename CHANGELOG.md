@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.28.0
+
+- Merge the model and reasoning-effort controls into a single composer button showing `model · effort`; one sectioned picker lists model names (current + provider model list + a cross-family suggestion list including Gemini) and reasoning-effort levels, switching either on selection.
+- Add `codeChasing.modelChoices` (default cross-family suggestion list) so every intended model is selectable even when a gateway does not expose a model-list endpoint.
+- Query provider model lists (`/models`, `/v1/models`, `/v1beta/models`) per protocol to populate the picker from the configured endpoint.
+- Validate manually entered model names against the known list and a provider existence probe; reject missing or unverifiable names instead of writing arbitrary values into the configuration.
+
 ## 0.27.0
 
 - Re-rank retrieved paper evidence with the configured model (listwise) before answering: retrieve a 2x candidate pool, let the model order the most relevant excerpts, and keep the evidence limit.

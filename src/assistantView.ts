@@ -25,7 +25,7 @@ export interface AssistantHandlers {
   cancelPaperAttachment(): Promise<void>;
   openPaper(): Promise<void>;
   configureProvider(): Promise<void>;
-  configureReasoningEffort(): Promise<void>;
+  configureModel(): Promise<void>;
   testProvider(): Promise<void>;
   moveToRight(): Promise<void>;
   startWalkthrough(): Promise<void>;
@@ -208,8 +208,8 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
           case 'configureProvider':
             await this.handlers.configureProvider();
             break;
-          case 'configureReasoningEffort':
-            await this.handlers.configureReasoningEffort();
+          case 'configureModel':
+            await this.handlers.configureModel();
             break;
           case 'testProvider':
             await this.handlers.testProvider();
@@ -680,7 +680,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
         <button class="icon-button" data-action="showPersistentExample" title="View running example and tensor trace" aria-label="View running example and tensor trace">◇</button>
         <button class="icon-button" data-action="configureProvider" title="Configure model" aria-label="Configure model">⚙</button>
         <button class="icon-button" data-action="testProvider" title="Test model connection" aria-label="Test model connection">✓</button>
-        <button id="reasoning-button" class="icon-button reasoning-button" data-action="configureReasoningEffort" title="Change reasoning effort" aria-label="Change reasoning effort">◉ <span id="reasoning-label">Auto</span></button>
+        <button id="model-button" class="icon-button model-button" data-action="configureModel" title="Change model and reasoning effort" aria-label="Change model and reasoning effort">▣ <span id="model-label">…</span></button>
         <button class="icon-button" data-action="manageIndexes" title="Manage paper and code indexes" aria-label="Manage indexes">⋯</button>
         <button class="icon-button" data-action="moveToRight" title="Move CodeChasing to the right side" aria-label="Move CodeChasing to the right side">⇥</button>
         <button class="icon-button" data-action="openConversationHistory" title="Conversation history" aria-label="Conversation history">◷</button>

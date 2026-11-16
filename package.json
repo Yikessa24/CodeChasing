@@ -2,7 +2,7 @@
   "name": "codechasing",
   "displayName": "CodeChasing",
   "description": "Evidence-grounded research paper and code understanding inside VS Code.",
-  "version": "0.27.0",
+  "version": "0.28.0",
   "publisher": "codechasing",
   "license": "MIT",
   "engines": {
@@ -146,6 +146,37 @@
           "type": "string",
           "default": "gpt-4.1-mini",
           "description": "Model name sent to the provider."
+        },
+        "codeChasing.modelChoices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "gemini-3-pro-preview",
+            "gemini-2.5-pro",
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-2.0-flash",
+            "claude-opus-4-5",
+            "claude-sonnet-4-5",
+            "claude-haiku-4-5",
+            "claude-opus-4-1",
+            "claude-sonnet-4-0",
+            "gpt-5.2",
+            "gpt-5.1",
+            "gpt-5",
+            "gpt-5-mini",
+            "gpt-4.1",
+            "o3",
+            "o4-mini",
+            "deepseek-chat",
+            "deepseek-reasoner",
+            "qwen-max",
+            "qwen-plus",
+            "qwen3-coder-plus"
+          ],
+          "description": "Model names shown in the model picker (a cross-family suggestion list including Gemini), merged with the provider's model list and the current model. Edit to match your gateway."
         },
         "codeChasing.reasoningEffort": {
           "type": "string",

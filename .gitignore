@@ -4,3 +4,4 @@ releases/
 *.vsix
 *.qoder.site
 .DS_Store
+codechasing-demo/

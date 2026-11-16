@@ -21,7 +21,7 @@ CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的
 **推荐演示组合**（论文与代码一一对应，适合展示"论文 ↔ 代码互证"）：
 
 - 论文：*Attention Is All You Need*（Transformer），PDF 可从 arXiv 下载：`https://arxiv.org/abs/1706.03762`
-- 代码：`https://github.com/harvardnlp/annotated-transformer`（PyTorch 逐行实现，核心在 `model.py`）
+- 代码：`https://github.com/harvardnlp/annotated-transformer`（PyTorch 逐行实现，核心在 `the_annotated_transformer.py`）
 - 可选：在 VS Code 中安装 Python 扩展，符号扫描会更完整；不安装也有语法级回退，不影响体验。
 
 > 本地模型也可以：用 Ollama / LM Studio 起一个 OpenAI 兼容端点，API key 留空即可。此时论文与代码内容不出本机（模型推理在本地）。
@@ -95,7 +95,7 @@ CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的
 ## 7. 代码互证：从论文跳到实现
 
 1. 确认当前窗口打开的是代码仓库文件夹（第 3 节已打开），点击 **⌕（Scan code structure）** 扫描工作区符号（优先使用已安装的语言服务器，另有语法回退）。
-2. 在编辑器中**选中一个函数或代码段**（例如 `model.py` 里的注意力实现），四种方式任选：
+2. 在编辑器中**选中一个函数或代码段**（例如 `the_annotated_transformer.py` 里的注意力实现），四种方式任选：
    - 选区上方自动出现的 CodeLens：**CodeChasing：询问或追踪这段代码**；
    - 编辑器标题栏的 💬 按钮；
    - 右键菜单中的同名命令；
