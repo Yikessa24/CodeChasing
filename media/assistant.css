@@ -9,9 +9,16 @@
   box-sizing: border-box;
 }
 
+html {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   margin: 0;
   height: 100vh;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   background: var(--vscode-sideBar-background);
@@ -54,6 +61,106 @@ body {
 
 #drop-overlay.visible {
   display: flex;
+}
+
+#example-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  background: color-mix(in srgb, var(--vscode-sideBar-background) 72%, transparent);
+}
+
+.example-panel {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  margin: 12px;
+  padding: 10px 14px;
+  overflow-y: auto;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 4px 14px var(--vscode-widget-shadow);
+}
+
+.example-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.example-note {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.example-summary {
+  margin: 0 0 6px;
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.example-dims {
+  margin: 0 0 8px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.example-steps {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.example-steps li {
+  margin-bottom: 10px;
+}
+
+.example-step-head {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.example-basis {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.example-step-op {
+  margin-top: 2px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: pre-wrap;
+}
+
+.example-step-actions {
+  margin-top: 4px;
+  display: flex;
+  gap: 6px;
+}
+
+.example-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--vscode-panel-border);
 }
 
 .status-label,
@@ -472,7 +579,9 @@ button:disabled {
 }
 
 footer {
-  position: relative;
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
   flex: 0 0 auto;
   padding: 10px 12px;
   border-top: 1px solid var(--vscode-panel-border);

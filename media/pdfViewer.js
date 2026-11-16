@@ -20,11 +20,6 @@ let zoom = 1;
 let fitMode = true;
 let pendingPdfSelection;
 let dragSelectionStart;
-let resolvePdfData;
-let pdfDataChunks = [];
-const pdfDataPromise = new Promise((resolve) => {
-  resolvePdfData = resolve;
-});
 const MIN_ZOOM = 0.4;
 const MAX_ZOOM = 3;
 const ZOOM_STEP = 0.2;
@@ -365,20 +360,7 @@ function applyHighlight(message) {
 }
 
 window.addEventListener('message', (event) => {
-  if (event.data?.type === 'pdfDataStart') {
-    pdfDataChunks = new Array(Number(event.data.chunkCount) || 0);
-  } else if (event.data?.type === 'pdfDataChunk') {
-    pdfDataChunks[Number(event.data.index)] = event.data.data || '';
-  } else if (event.data?.type === 'pdfDataEnd') {
-    const binary = atob(pdfDataChunks.join(''));
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    pdfDataChunks = [];
-    resolvePdfData?.(bytes);
-    resolvePdfData = undefined;
-  } else if (event.data?.type === 'highlight') {
+  if (event.data?.type === 'highlight') {
     applyHighlight(event.data);
   }
 });
@@ -474,6 +456,8 @@ async function renderPage(pdf, pageNumber) {
 
 async function prepareRemainingPages(pdf) {
   for (let pageNumber = 2; pageNumber <= pdf.numPages; pageNumber += 1) {
+    // Visible-page renders must not queue behind bulk page-dict fetches.
+    await Promise.all(renderPromises.values());
     await createPageShell(pdf, pageNumber);
   }
 }
@@ -481,12 +465,12 @@ async function prepareRemainingPages(pdf) {
 async function render() {
   try {
     pdfjsLib = await import(config.pdfModule);
+    // pdf_viewer.mjs destructures globalThis.pdfjsLib at module evaluation time.
     globalThis.pdfjsLib = pdfjsLib;
     pdfjsViewer = await import(config.viewerModule);
     pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerModule;
-    status.textContent = 'Loading prepared PDF…';
-    const pdfData = await pdfDataPromise;
-    const loadingTask = pdfjsLib.getDocument({ data: pdfData, wasmUrl: config.wasmUrl });
+    status.textContent = 'Opening PDF…';
+    const loadingTask = pdfjsLib.getDocument({ url: config.pdfUrl, wasmUrl: config.wasmUrl });
     window.addEventListener('pagehide', () => void loadingTask.destroy(), { once: true });
     const pdf = await loadingTask.promise;
     pageObserver = new IntersectionObserver(
@@ -504,9 +488,9 @@ async function render() {
 
     status.textContent = `${pdf.numPages} pages · opening…`;
     await createPageShell(pdf, 1);
+    fitToWidth();
     await renderPage(pdf, 1);
     startupPreview?.remove();
-    fitToWidth();
     status.textContent = `${pdf.numPages} pages · ready`;
     vscode.postMessage({ type: 'pdfReady', hash: config.hash, pages: pdf.numPages });
 

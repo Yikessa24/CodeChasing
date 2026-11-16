@@ -940,11 +940,189 @@ document.addEventListener('dragleave', (event) => {
     dropOverlay.classList.remove('visible');
   }
 });
+function droppedPdfFile(transfer) {
+  const files = transfer.files;
+  if (files && files.length) {
+    for (const file of files) {
+      if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
+        return file;
+      }
+    }
+    return files[0];
+  }
+  for (const item of transfer.items || []) {
+    if (item.kind === 'file') {
+      const file = item.getAsFile();
+      if (file) {
+        return file;
+      }
+    }
+  }
+  return undefined;
+}
+
+function droppedPdfUri(transfer) {
+  const candidates = [];
+  for (const type of ['text/uri-list', 'text/plain']) {
+    const value = transfer.getData(type);
+    if (value) {
+      candidates.push(...value.split(/\r?\n/));
+    }
+  }
+  for (const candidate of candidates) {
+    const value = candidate.trim();
+    if (!value || value.startsWith('#')) {
+      continue;
+    }
+    if (/\.pdf$/i.test(value.split(/[?#]/)[0])) {
+      return value;
+    }
+  }
+  return undefined;
+}
+
 document.addEventListener('drop', (event) => {
   event.preventDefault();
   dragDepth = 0;
   dropOverlay.classList.remove('visible');
-  uploadPdf(event.dataTransfer?.files?.[0]);
+  const transfer = event.dataTransfer;
+  if (!transfer) {
+    return;
+  }
+  const file = droppedPdfFile(transfer);
+  if (file) {
+    uploadPdf(file);
+    return;
+  }
+  const uri = droppedPdfUri(transfer);
+  if (uri) {
+    const title = decodeURIComponent(uri.split(/[?#]/)[0].split('/').pop() || 'Paper.pdf');
+    setPaperAttachmentCard({
+      title,
+      state: 'Reading file…',
+      progress: 2,
+      preparing: true,
+      visible: true
+    });
+    post('dropPdfPath', { uri });
+    return;
+  }
+  messageElement('error', '请拖入 PDF 文件，或点 + 选择文件。');
+});
+
+let exampleOverlay;
+
+function closeExampleOverlay() {
+  exampleOverlay?.remove();
+  exampleOverlay = undefined;
+}
+
+function showExampleOverlay(example) {
+  closeExampleOverlay();
+  if (!example || typeof example !== 'object') {
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.id = 'example-overlay';
+  const panel = document.createElement('section');
+  panel.className = 'example-panel';
+  const header = document.createElement('header');
+  const title = document.createElement('strong');
+  title.textContent = '常驻运行样例 · 张量流追踪';
+  const close = document.createElement('button');
+  close.className = 'icon-button';
+  close.title = '关闭';
+  close.setAttribute('aria-label', '关闭');
+  close.textContent = '×';
+  close.addEventListener('click', closeExampleOverlay);
+  header.append(title, close);
+  panel.append(header);
+  if (Array.isArray(example.assumptions) && example.assumptions.length) {
+    const note = document.createElement('p');
+    note.className = 'example-note';
+    note.textContent = example.assumptions.join(' ');
+    panel.append(note);
+  }
+  const summary = document.createElement('p');
+  summary.className = 'example-summary';
+  summary.textContent = `${example.title || ''} ${example.inputDescription || ''}`.trim();
+  panel.append(summary);
+  const dimensions = Object.entries(example.dimensions || {});
+  if (dimensions.length) {
+    const dims = document.createElement('p');
+    dims.className = 'example-dims';
+    dims.textContent = `固定维度：${dimensions.map(([key, value]) => `${key}=${value}`).join('，')}`;
+    panel.append(dims);
+  }
+  const basisLabels = { code: '代码', paper: '论文', inferred: '推断', assumed: '假设', runtime: '运行时' };
+  const list = document.createElement('ol');
+  list.className = 'example-steps';
+  for (const step of Array.isArray(example.trace) ? example.trace : []) {
+    const item = document.createElement('li');
+    const head = document.createElement('div');
+    head.className = 'example-step-head';
+    head.textContent = `${step.order}. ${step.stage} · ${step.variable}　${step.inputShape} → ${step.outputShape} `;
+    const tag = document.createElement('span');
+    tag.className = 'example-basis';
+    tag.textContent = basisLabels[step.basis] || step.basis || '推断';
+    head.append(tag);
+    const operation = document.createElement('div');
+    operation.className = 'example-step-op';
+    operation.textContent = step.operation || '';
+    item.append(head, operation);
+    const actions = document.createElement('div');
+    actions.className = 'example-step-actions';
+    if (step.paperCitation) {
+      const button = document.createElement('button');
+      button.textContent = '论文证据';
+      button.addEventListener('click', () => post('openEvidence', { citation: step.paperCitation }));
+      actions.append(button);
+    }
+    if (step.codeReference) {
+      const button = document.createElement('button');
+      button.textContent = '代码位置';
+      button.addEventListener('click', () =>
+        post('openCode', {
+          filePath: step.codeReference.filePath,
+          startLine: step.codeReference.startLine,
+          endLine: step.codeReference.endLine
+        })
+      );
+      actions.append(button);
+    }
+    if (actions.children.length) {
+      item.append(actions);
+    }
+    list.append(item);
+  }
+  panel.append(list);
+  const footer = document.createElement('div');
+  footer.className = 'example-footer';
+  const hint = document.createElement('span');
+  hint.className = 'keyboard-hint';
+  hint.textContent = '推断/假设 = 未由代码或论文直接证实 · Esc 关闭';
+  const reset = document.createElement('button');
+  reset.textContent = '重置样例';
+  reset.addEventListener('click', () => {
+    post('resetPersistentExample');
+    closeExampleOverlay();
+  });
+  footer.append(hint, reset);
+  panel.append(footer);
+  overlay.append(panel);
+  overlay.addEventListener('click', (event) => {
+    if (event.target === overlay) {
+      closeExampleOverlay();
+    }
+  });
+  document.body.append(overlay);
+  exampleOverlay = overlay;
+}
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    closeExampleOverlay();
+  }
 });
 
 window.addEventListener('message', (event) => {
@@ -1134,14 +1312,14 @@ window.addEventListener('message', (event) => {
     }
     case 'modelStatus':
       document.getElementById('model-status').textContent = message.model
-        ? `${message.model.name} · ${message.model.reasoningEffort}${
+        ? `${message.model.label || message.model.name} · ${message.model.reasoningEffort}${
             message.model.insecureTransport ? ' · HTTP insecure' : ''
           }`
         : 'Not configured';
       const modelLabel = document.getElementById('model-label');
       if (modelLabel) {
         modelLabel.textContent = message.model
-          ? `${message.model.name} · ${message.model.reasoningEffort}`
+          ? `${message.model.label || message.model.name} · ${message.model.reasoningEffort}`
           : '未配置';
       }
       updateContextSummary();
@@ -1162,6 +1340,9 @@ window.addEventListener('message', (event) => {
       updateContextSummary();
       break;
     }
+    case 'persistentExample':
+      showExampleOverlay(message.example);
+      break;
     case 'busy':
       isBusy = Boolean(message.busy);
       canCancel = isBusy && Boolean(message.cancellable);

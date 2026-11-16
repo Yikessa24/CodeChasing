@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.28.1
+
+- Restore PDF drag-and-drop into the composer: accept OS file drops and Explorer drags (text/uri-list), reading Explorer paths host-side with a file-scheme guard.
+- Diagnose Anthropic empty-text responses with stop reason and block types instead of a bare error; size max_tokens by reasoning effort so extended thinking cannot consume the whole budget; model probes now require a real text delta before reporting a model usable.
+- Fix collapsed KaTeX fractions/subscripts and PDF text-layer geometry by allowing inline styles in both webview CSPs.
+- Pin the composer to the panel bottom with an internal message scroll area; cache-bust webview assets per load so reinstalls cannot serve stale frames.
+- Open PDFs by streaming the stored file into pdf.js instead of base64 chunk transfer, rendering the first page immediately and remaining pages on demand.
+- Replace the persistent-example QuickPick with a readable, scrollable in-panel overlay: full assumptions and summary, localized basis tags, working paper/code evidence buttons, reset, and Esc/backdrop close; constrain example wording to plain Chinese with explicit direction origin and invented-sentence disclosure.
+
 ## 0.28.0
 
 - Merge the model and reasoning-effort controls into a single composer button showing `model · effort`; one sectioned picker lists model names (current + provider model list + a cross-family suggestion list including Gemini) and reasoning-effort levels, switching either on selection.

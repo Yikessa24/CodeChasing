@@ -22,6 +22,7 @@ export interface AssistantHandlers {
   ask(text: string, quotedText?: string, quotedCitations?: PaperCitation[]): Promise<void>;
   importPaper(): Promise<void>;
   importDroppedPdf(fileName: string, base64: string): Promise<void>;
+  importDroppedPdfPath(uri: string): Promise<void>;
   cancelPaperAttachment(): Promise<void>;
   openPaper(): Promise<void>;
   configureProvider(): Promise<void>;
@@ -35,6 +36,7 @@ export interface AssistantHandlers {
   openCallGraph(): Promise<void>;
   manageMappings(): Promise<void>;
   showPersistentExample(): Promise<void>;
+  resetPersistentExample(): Promise<void>;
   openEvidence(citation: {
     chunkId: string;
     paperHash?: string;
@@ -55,6 +57,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
   private currentSymbolCount = 0;
   private currentIndexStatus: RepositoryIndexStatus = 'idle';
   private currentModel: ProviderConfig | undefined;
+  private currentModelLabel: string | undefined;
   private currentConversation: ChatMessage[] = [];
   private currentSelectedCode: CodeSelectionReference | undefined;
   private currentPersistentExample: PersistentExample | undefined;
@@ -112,7 +115,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
           case 'ready':
             this.setPaper(this.currentPaper);
             this.setIndexStatus(this.currentSymbolCount, this.currentIndexStatus);
-            this.setModelStatus(this.currentModel);
+            this.setModelStatus(this.currentModel, this.currentModelLabel);
             this.setConversation(this.currentConversation);
             this.setPersistentExample(this.currentPersistentExample);
             this.setMappingCount(this.currentMappingCount);
@@ -144,6 +147,11 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
           case 'dropPdf':
             if (typeof data.fileName === 'string' && typeof data.base64 === 'string') {
               await this.handlers.importDroppedPdf(data.fileName, data.base64);
+            }
+            break;
+          case 'dropPdfPath':
+            if (typeof data.uri === 'string' && data.uri.trim()) {
+              await this.handlers.importDroppedPdfPath(data.uri.trim());
             }
             break;
           case 'cancelPaperAttachment':
@@ -237,6 +245,9 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
             break;
           case 'showPersistentExample':
             await this.handlers.showPersistentExample();
+            break;
+          case 'resetPersistentExample':
+            await this.handlers.resetPersistentExample();
             break;
           case 'clearConversation':
             await this.handlers.clearConversation();
@@ -479,8 +490,12 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'indexStatus', symbolCount, status });
   }
 
-  public setModelStatus(configuration: ProviderConfig | undefined): void {
+  public setModelStatus(
+    configuration: ProviderConfig | undefined,
+    displayName?: string
+  ): void {
     this.currentModel = configuration;
+    this.currentModelLabel = configuration ? displayName : undefined;
     let insecureTransport = false;
     if (configuration) {
       try {
@@ -498,6 +513,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
         ? {
             provider: configuration.provider,
             name: configuration.model,
+            label: displayName ?? configuration.model,
             reasoningEffort: configuration.reasoningEffort,
             insecureTransport
           }
@@ -511,6 +527,10 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
       type: 'persistentExampleStatus',
       example: example ? { title: example.title, steps: example.trace.length } : undefined
     });
+  }
+
+  public showPersistentExample(example: PersistentExample): void {
+    void this.view?.webview.postMessage({ type: 'persistentExample', example });
   }
 
   public setMappingCount(count: number): void {
@@ -624,9 +644,9 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource};" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource};" />
     <link rel="stylesheet" href="${katexStyle}" />
-    <link rel="stylesheet" href="${style}" />
+    <link rel="stylesheet" href="${style}?v=${scriptNonce}" />
     <title>CodeChasing</title>
   </head>
   <body>
@@ -691,7 +711,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
     <button id="ask-selection" hidden>询问这段</button>
     <div id="drop-overlay" aria-hidden="true"><strong>Drop PDF to import</strong></div>
     <script nonce="${scriptNonce}" src="${katexScript}"></script>
-    <script nonce="${scriptNonce}" src="${script}"></script>
+    <script nonce="${scriptNonce}" src="${script}?v=${scriptNonce}"></script>
   </body>
 </html>`;
   }

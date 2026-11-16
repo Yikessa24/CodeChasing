@@ -10,7 +10,17 @@ const config = { provider: 'openai-compatible', baseUrl: 'http://localhost', mod
 let network = async () => { throw new Error('Unexpected network call'); };
 const notices = [];
 const vscode = {
-  workspace: { getConfiguration: () => ({ get: (key, fallback) => config[key] ?? fallback }) },
+  workspace: {
+    getConfiguration: () => ({ get: (key, fallback) => config[key] ?? fallback }),
+    fs: { readFile: async () => new TextEncoder().encode('%PDF-1.7 test') }
+  },
+  Uri: {
+    file: (path) => ({ scheme: 'file', path }),
+    parse: (value) => {
+      const url = new URL(value);
+      return { scheme: url.protocol.slice(0, -1), path: decodeURIComponent(url.pathname) };
+    }
+  },
   window: { showWarningMessage: (message) => notices.push(message), showErrorMessage: (message) => notices.push(message) }
 };
 async function load(source, exports = '') {
@@ -22,14 +32,14 @@ async function load(source, exports = '') {
   const module = { exports: {} };
   vm.runInNewContext(bundle.outputFiles[0].text, {
     module, exports: module.exports, require: (id) => id === 'vscode' ? vscode : require(id),
-    console, Buffer, TextDecoder, TextEncoder, URL, AbortController, DOMException,
+    console, Buffer, TextDecoder, TextEncoder, URL, AbortController, AbortSignal, DOMException,
     setTimeout, clearTimeout, fetch: (...args) => network(...args)
   });
   return module.exports;
 }
 const { CodeChasingApplication } = await load('src/extension.ts', '\nexport { CodeChasingApplication };');
 const { AssistantViewProvider } = await load('src/assistantView.ts');
-const { createChatProvider } = await load('src/modelProviders.ts');
+const { createChatProvider, probeModelAccess } = await load('src/modelProviders.ts');
 const { parseCitationAuditResponse } = await load('src/citationValidation.ts');
 function appFixture() {
   const app = Object.create(CodeChasingApplication.prototype);
@@ -86,6 +96,48 @@ for (const [provider, delta] of [
 
 network = async () => new Response('event: error\ndata: temporarily unavailable\n\n');
 await assert.rejects(createChatProvider(config).stream([], () => {}), /temporarily unavailable/);
+
+// A textless Anthropic stream names its stop reason and block types, and high
+// effort gets enough output budget for thinking plus the visible answer.
+{
+  const anthropic = { ...config, provider: 'anthropic', apiKey: 'test-only' };
+  network = async () => new Response([
+    'data: {"type":"content_block_start","content_block":{"type":"thinking"}}',
+    'data: {"type":"content_block_delta","delta":{"type":"thinking_delta","thinking":"hmm"}}',
+    'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}',
+    'data: {"type":"message_stop"}'
+  ].join('\n\n') + '\n\n');
+  await assert.rejects(
+    createChatProvider({ ...anthropic, reasoningEffort: 'high' }).stream([], () => {}),
+    /stop_reason=max_tokens, blocks=thinking/
+  );
+  for (const [effort, budget] of [['auto', 8000], ['high', 16000], ['xhigh', 32000]]) {
+    let body;
+    network = async (_url, init) => {
+      body = JSON.parse(init.body);
+      return new Response('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"ok"}}\n\ndata: {"type":"message_stop"}\n\n');
+    };
+    await createChatProvider({ ...anthropic, reasoningEffort: effort }).stream([], () => {});
+    assert.equal(body.max_tokens, budget);
+  }
+}
+
+// The probe trusts a model only after a real text delta, not after HTTP 200.
+{
+  const anthropic = { ...config, provider: 'anthropic', apiKey: 'test-only' };
+  network = async () => new Response([
+    'data: {"type":"content_block_start","content_block":{"type":"thinking"}}',
+    'data: {"type":"message_delta","delta":{"stop_reason":"max_tokens"}}',
+    'data: {"type":"message_stop"}'
+  ].join('\n\n') + '\n\n');
+  assert.equal((await probeModelAccess(anthropic, 'silent-model')).verdict, 'silent');
+  network = async () => new Response('data: {"type":"content_block_delta","delta":{"type":"text_delta","text":"pong"}}\n\n');
+  assert.equal((await probeModelAccess(anthropic, 'good-model')).verdict, 'ok');
+  network = async () => new Response('{"error":"nope"}', { status: 403 });
+  assert.equal((await probeModelAccess(anthropic, 'denied-model')).verdict, 'denied');
+  network = async () => new Response('data: {"choices":[{"delta":{"content":"pong"}}]}\n\ndata: [DONE]\n\n');
+  assert.equal((await probeModelAccess(config, 'good-openai')).verdict, 'ok');
+}
 for (const malformed of ['{}', '{"validPaperIds":"P1","validCodeIds":[]}', '{"validPaperIds":[null],"validCodeIds":[]}']) {
   assert.equal(parseCitationAuditResponse(malformed, ['P1'], []), undefined);
 }
@@ -196,6 +248,25 @@ network = async () => new Response('data: {"choices":[{"delta":{"content":"Compl
   assert.equal(app.saved[1].content, 'Complete answer');
 }
 
+// A URI-only drop imports the local file and refuses remote schemes.
+{
+  const { app, events } = appFixture();
+  const imported = [];
+  app.paperStore.importBytes = async (name, bytes) => {
+    imported.push({ name, size: bytes.byteLength });
+    return { hash: 'paper', extractionStatus: 'ready' };
+  };
+  app.preparePaperInBackground = async () => true;
+  app.semanticMappings = { activeCount: () => 0 };
+  await app.importDroppedPdfPath('file:///demo/attention-is-all-you-need.pdf');
+  assert.equal(imported.length, 1);
+  assert.equal(imported[0].name, 'attention-is-all-you-need.pdf');
+  assert.ok(imported[0].size > 0);
+  assert.ok(events.some((event) => event.name === 'beginPaperAttachment'));
+  await assert.rejects(app.importDroppedPdfPath('https://example.com/paper.pdf'), /local PDF/);
+  assert.equal(imported.length, 1);
+}
+
 // Run the actual assistant script with a small DOM to exercise message handling.
 class Element {
   constructor() {
@@ -204,12 +275,12 @@ class Element {
     this.classList = { add() {}, remove() {}, toggle() {} };
     this.style = { setProperty() {} };
   }
-  append(...children) { this.children.push(...children); }
-  insertBefore(child) { this.children.unshift(child); }
-  replaceChildren(...children) { this.children = children; }
-  addEventListener() {}
+  append(...children) { for (const child of children) child.parent = this; this.children.push(...children); }
+  insertBefore(child) { child.parent = this; this.children.unshift(child); }
+  replaceChildren(...children) { for (const child of children) child.parent = this; this.children = children; }
+  addEventListener(type, callback) { (this.listeners ??= {})[type] = callback; }
   setAttribute() {}
-  remove() {}
+  remove() { if (this.parent) this.parent.children = this.parent.children.filter((child) => child !== this); }
   querySelector(selector) { return this.children.find((child) => child.className?.split(' ').includes(selector.slice(1))); }
   querySelectorAll() { return []; }
 }
@@ -217,6 +288,7 @@ const nodes = new Map();
 const timers = new Map();
 let timerId = 0;
 let listener;
+const documentListeners = new Map();
 const sentMessages = [];
 const ui = vm.createContext({
   console,
@@ -224,8 +296,10 @@ const ui = vm.createContext({
   document: {
     getElementById: (id) => { if (!nodes.has(id)) nodes.set(id, new Element()); return nodes.get(id); },
     querySelector: () => undefined, querySelectorAll: () => [],
-    createElement: () => new Element(), addEventListener() {},
-    createTreeWalker: () => ({ nextNode: () => false })
+    createElement: () => new Element(),
+    addEventListener: (type, callback) => documentListeners.set(type, callback),
+    createTreeWalker: () => ({ nextNode: () => false }),
+    body: new Element()
   },
   NodeFilter: { SHOW_TEXT: 4 },
   window: { addEventListener: (type, callback) => { if (type === 'message') listener = callback; } },
@@ -266,4 +340,74 @@ vm.runInContext('submit()', ui);
 emit('userMessage', { text: 'my question', pending: true });
 assert.equal(vm.runInContext('pendingSubmission', ui), undefined);
 assert.equal(nodes.get('send').disabled, true, 'accepted messages stay locked until completion');
-console.log('Cancellation, interrupted-history, streaming-scroll, and citation-selection regressions passed');
+// KaTeX fractions and the PDF.js text layer position everything with inline
+// styles, so a CSP without 'unsafe-inline' in style-src silently collapses them.
+for (const file of ['src/assistantView.ts', 'src/pdfViewer.ts']) {
+  const source = await readFile(file, 'utf8');
+  const csp = source.match(/Content-Security-Policy" content="([^"]+)"/);
+  assert.ok(csp, `${file} must declare a CSP`);
+  assert.match(csp[1], /style-src[^;]*'unsafe-inline'/);
+}
+
+// Dragging a PDF from the OS or from VS Code's Explorer must both reach the importer.
+{
+  const drop = documentListeners.get('drop');
+  assert.ok(drop, 'the webview must register a drop handler');
+  ui.FileReader = class {
+    readAsDataURL(file) { this.result = `data:application/pdf;base64,${file.payload}`; this.onload(); }
+  };
+  const preventDefault = () => {};
+  const transfer = (extra) => ({ preventDefault, dataTransfer: { files: [], items: [], getData: () => '', ...extra } });
+  drop(transfer({ files: [{ name: 'paper.pdf', type: 'application/pdf', size: 8, payload: 'QUJD' }] }));
+  assert.equal(sentMessages.at(-1).type, 'dropPdf');
+  assert.equal(sentMessages.at(-1).fileName, 'paper.pdf');
+  assert.equal(sentMessages.at(-1).base64, 'QUJD');
+  drop(transfer({ getData: (type) => type === 'text/uri-list' ? 'file:///demo/attention-is-all-you-need.pdf\r\n' : '' }));
+  assert.equal(sentMessages.at(-1).type, 'dropPdfPath');
+  assert.equal(sentMessages.at(-1).uri, 'file:///demo/attention-is-all-you-need.pdf');
+  const before = sentMessages.length;
+  drop(transfer({ getData: (type) => type === 'text/plain' ? '/demo/notes.txt' : '' }));
+  assert.equal(sentMessages.length, before, 'a non-PDF drop must not import anything');
+}
+
+// The running example opens as a readable overlay whose evidence buttons work.
+{
+  const example = {
+    title: '德→英 Transformer 数据流',
+    inputDescription: '教学样例句子，不是论文真实样本。',
+    dimensions: { B: '1' },
+    assumptions: ['样例句子为教学虚构。'],
+    trace: [
+      { order: 1, stage: '输入文本', variable: 'src_text', inputShape: 'str', outputShape: 'str', operation: '读取源句', basis: 'assumed' },
+      {
+        order: 2, stage: '词表查找', variable: 'src_ids', inputShape: '[1,72]', outputShape: '[1,72]', operation: '查表', basis: 'paper',
+        paperCitation: { citationId: 'P1', chunkId: 'chunk', page: 2 },
+        codeReference: { filePath: 'model.py', startLine: 3, endLine: 9 }
+      }
+    ]
+  };
+  emit('persistentExample', { example });
+  const overlay = ui.document.body.children.at(-1);
+  assert.ok(overlay, 'example must render into an overlay');
+  const collect = (node, out = []) => { out.push(node); for (const child of node.children) collect(child, out); return out; };
+  const all = collect(overlay);
+  assert.ok(all.some((node) => node.textContent === '样例句子为教学虚构。'), 'assumptions must be fully readable');
+  assert.ok(all.some((node) => node.textContent === '假设'), 'basis tags must be localized');
+  all.find((node) => node.textContent === '论文证据').listeners.click();
+  assert.equal(sentMessages.at(-1).type, 'openEvidence');
+  assert.equal(sentMessages.at(-1).citation.citationId, 'P1');
+  all.find((node) => node.textContent === '代码位置').listeners.click();
+  assert.equal(sentMessages.at(-1).type, 'openCode');
+  assert.equal(sentMessages.at(-1).filePath, 'model.py');
+  all.find((node) => node.textContent === '重置样例').listeners.click();
+  assert.equal(sentMessages.at(-1).type, 'resetPersistentExample');
+  assert.equal(ui.document.body.children.length, 0, 'reset must close the overlay');
+  emit('persistentExample', { example });
+  documentListeners.get('keydown')({ key: 'Escape' });
+  assert.equal(ui.document.body.children.length, 0, 'Esc must close the overlay');
+}
+const extensionSource = await readFile('src/extension.ts', 'utf8');
+assert.match(extensionSource, /this\.assistantView\.showPersistentExample\(example\)/);
+assert.doesNotMatch(extensionSource, /Persistent running example/);
+
+console.log('Cancellation, interrupted-history, streaming-scroll, citation-selection, and PDF drag-drop regressions passed');

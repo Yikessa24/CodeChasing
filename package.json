@@ -2,7 +2,7 @@
   "name": "codechasing",
   "displayName": "CodeChasing",
   "description": "Evidence-grounded research paper and code understanding inside VS Code.",
-  "version": "0.28.0",
+  "version": "0.28.1",
   "publisher": "codechasing",
   "license": "MIT",
   "engines": {
@@ -176,7 +176,7 @@
             "qwen-plus",
             "qwen3-coder-plus"
           ],
-          "description": "Model names shown in the model picker (a cross-family suggestion list including Gemini), merged with the provider's model list and the current model. Edit to match your gateway."
+          "description": "Extra model names considered by the model picker, on top of the provider's model list and the current model. Every candidate is probed with the configured API key first; only models that pass the probe are offered. Edit to match your gateway."
         },
         "codeChasing.reasoningEffort": {
           "type": "string",

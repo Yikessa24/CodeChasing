@@ -770,10 +770,11 @@ assert.match(pdfViewerScript, /textLayerRecord\.builder\.render\(\{ viewport: sc
 assert.doesNotMatch(pdfViewerScript, /textLayer\.style\.transform = `scale/);
 assert.match(pdfViewerScript, /globalThis\.pdfjsLib = pdfjsLib/);
 assert.match(pdfViewerScript, /import\(config\.viewerModule\)/);
-assert.match(pdfViewerScript, /type === 'pdfDataStart'/);
-assert.match(pdfViewerScript, /type === 'pdfDataChunk'/);
-assert.match(pdfViewerScript, /type === 'pdfDataEnd'/);
-assert.match(pdfViewerScript, /getDocument\(\{ data: pdfData, wasmUrl: config\.wasmUrl \}\)/);
+assert.doesNotMatch(pdfViewerScript, /pdfDataChunk|atob\(/);
+assert.match(pdfViewerScript, /getDocument\(\{ url: config\.pdfUrl, wasmUrl: config\.wasmUrl \}\)/);
+const pdfViewerSource = await readFile('src/pdfViewer.ts', 'utf8');
+assert.match(pdfViewerSource, /pdfUrl: webview\.asWebviewUri\(vscode\.Uri\.parse\(paper\.storedPdfUri\)\)/);
+assert.doesNotMatch(pdfViewerSource, /pdfDataChunk/);
 assert.match(pdfViewerScript, /type: 'askPdfSelection', hash: config\.hash/);
 assert.match(pdfViewerScript, /loadingTask\.destroy\(\)/);
 assert.match(pdfViewerScript, /type: 'pdfError'/);

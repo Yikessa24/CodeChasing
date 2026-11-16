@@ -65,7 +65,6 @@ export class PdfViewer implements vscode.Disposable {
   }
 
   public async open(paper: PaperMetadata): Promise<void> {
-    await this.prepare(paper);
     this.onViewerStatus?.(this.readyPaperHash === paper.hash ? 'ready' : 'loading');
     await this.ensurePanel(paper, {
       viewColumn: vscode.ViewColumn.Beside,
@@ -117,7 +116,6 @@ export class PdfViewer implements vscode.Disposable {
           }
           const data = message as Record<string, unknown>;
           if (data.type === 'viewerReady') {
-            await this.postPdfData();
             if (this.pendingHighlight) {
               await this.postHighlight(this.pendingHighlight);
             }
@@ -188,28 +186,6 @@ export class PdfViewer implements vscode.Disposable {
     });
   }
 
-  private async postPdfData(): Promise<void> {
-    if (!this.panel || !this.currentPaper) {
-      return;
-    }
-    await this.prepare(this.currentPaper);
-    const bytes = this.preparedPdfs.get(this.currentPaper.hash);
-    if (bytes) {
-      const encoded = Buffer.from(bytes).toString('base64');
-      const chunkSize = 512 * 1024;
-      const chunkCount = Math.ceil(encoded.length / chunkSize);
-      await this.panel.webview.postMessage({ type: 'pdfDataStart', chunkCount });
-      for (let index = 0; index < chunkCount; index += 1) {
-        await this.panel.webview.postMessage({
-          type: 'pdfDataChunk',
-          index,
-          data: encoded.slice(index * chunkSize, (index + 1) * chunkSize)
-        });
-      }
-      await this.panel.webview.postMessage({ type: 'pdfDataEnd' });
-    }
-  }
-
   public dispose(): void {
     this.panel?.dispose();
     for (const disposable of this.disposables) {
@@ -258,8 +234,8 @@ export class PdfViewer implements vscode.Disposable {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource}; connect-src ${webview.cspSource};" />
-    <link rel="stylesheet" href="${style}" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource}; connect-src ${webview.cspSource};" />
+    <link rel="stylesheet" href="${style}?v=${scriptNonce}" />
     <title>${escapeHtml(paper.title)}</title>
   </head>
   <body>
@@ -279,13 +255,14 @@ export class PdfViewer implements vscode.Disposable {
       window.codeChasingPaper = ${JSON.stringify({
         hash: paper.hash,
         preview: this.preparedPreviews.get(paper.hash),
+        pdfUrl: webview.asWebviewUri(vscode.Uri.parse(paper.storedPdfUri)).toString(),
         pdfModule: pdfModule.toString(),
         workerModule: workerModule.toString(),
         viewerModule: viewerModule.toString(),
         wasmUrl: `${wasmUrl.toString()}/`
       })};
     </script>
-    <script nonce="${scriptNonce}" type="module" src="${script}"></script>
+    <script nonce="${scriptNonce}" type="module" src="${script}?v=${scriptNonce}"></script>
   </body>
 </html>`;
   }
