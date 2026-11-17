@@ -314,6 +314,23 @@ assert.equal(graph.edges.find((edge) => edge.from === 'model:forward' && edge.to
 const slicedGraph = graphModule.exports.sliceCallGraph(graph, 'model:forward', 2);
 assert.equal(slicedGraph.nodes.length, 2);
 assert.equal(slicedGraph.truncated, true);
+const noisyGraph = graphModule.exports.buildStaticCallGraph([
+  { node: { id: 'a:init', filePath: 'model.py', symbolName: 'A.__init__', startLine: 1, endLine: 3, languageId: 'python' }, containerName: 'A', source: 'def __init__(self):\n    super().__init__()\n    nn.Module.__init__(self)' },
+  { node: { id: 'b:init', filePath: 'model.py', symbolName: 'B.__init__', startLine: 5, endLine: 7, languageId: 'python' }, containerName: 'B', source: 'def __init__(self):\n    super().__init__()' },
+  { node: { id: 'a:forward', filePath: 'model.py', symbolName: 'A.forward', startLine: 9, endLine: 11, languageId: 'python' }, containerName: 'A', source: 'def forward(self, x):\n    return self.helper(x)' },
+  { node: { id: 'a:helper', filePath: 'model.py', symbolName: 'A.helper', startLine: 13, endLine: 14, languageId: 'python' }, containerName: 'A', source: 'def helper(self, x):\n    return x' },
+  { node: { id: 'lonely', filePath: 'model.py', symbolName: 'lonely', startLine: 20, endLine: 21, languageId: 'python' }, source: 'def lonely():\n    return 1' }
+]);
+assert.equal(noisyGraph.edges.length, 1, 'super() and library __init__ calls must not create edges');
+assert.equal(noisyGraph.edges[0].from, 'a:forward');
+assert.equal(noisyGraph.edges[0].to, 'a:helper');
+const prunedGraph = graphModule.exports.sliceCallGraph(noisyGraph, undefined, 50);
+assert.deepEqual(prunedGraph.nodes.map((node) => node.id).sort(), ['a:forward', 'a:helper'], 'isolated symbols must not render in the overview');
+const instanceGraph = graphModule.exports.buildStaticCallGraph([
+  { node: { id: 'm:forward', filePath: 'model.py', symbolName: 'M.forward', startLine: 1, endLine: 2, languageId: 'python' }, containerName: 'M', source: 'def forward(self, x):\n    return self.encoder(x)' },
+  { node: { id: 'encoder', filePath: 'model.py', symbolName: 'Encoder', startLine: 30, endLine: 40, languageId: 'python' }, source: 'class Encoder:\n    pass' }
+]);
+assert.equal(instanceGraph.edges.find((edge) => edge.from === 'm:forward' && edge.to === 'encoder')?.confidence, 0.9, 'self.attribute calls may resolve to a uniquely named project class');
 for (const sourcePath of ['src/model.py', 'configs/train.yaml', 'docs/architecture.md']) {
   assert.equal(isSensitiveWorkspacePath(sourcePath), false, `${sourcePath} must remain readable`);
 }
@@ -749,6 +766,11 @@ assert.match(extensionSource, /const provider = createChatProvider\(config\)/);
 assert.doesNotMatch(extensionSource, /validPaperIds: new Set\(validatePaperCitations\(answer, evidence\)\.validIds\)/);
 assert.match(extensionSource, /validPaperIds: new Set\(unavailable\.validPaperIds\)/);
 assert.match(extensionSource, /引用审查未能完成/);
+assert.match(extensionSource, /For CODE IDs: every CODE EVIDENCE line is prefixed with its real line number/);
+assert.match(extensionSource, /\$\{item\.startLine \+ offset\}: \$\{line\}/);
+assert.match(extensionSource, /does not invalidate a code ID while the code-side claim holds/);
+assert.match(extensionSource, /核验论文与代码引用…/);
+assert.match(extensionSource, /提炼常驻运行样例…/);
 assert.match(repositorySource, /findFiles\('\*\*\/\*', EXCLUDE_GLOB, maxFiles \+ 1\)/);
 assert.match(repositorySource, /\.slice\(0, maxFiles\)/);
 assert.match(repositorySource, /findFiles\('\*\*\/\*', EXCLUDE_GLOB\)/);

@@ -89,6 +89,13 @@ function resolveCall(
   if (qualifier === 'self' || qualifier === 'this' || qualifier === 'cls' || qualifier === 'super') {
     const classMethods = sameFile.filter((candidate) => sameContainer(candidate.containerName, caller.containerName));
     if (classMethods.length === 1) return { targets: classMethods, kind: 'calls', confidence: 0.98 };
+    const instanceTypes = withoutSelf.filter(
+      (candidate) =>
+        !candidate.containerName &&
+        candidate.node.symbolName.split('.').at(-1)?.toLowerCase() === site.name.toLowerCase()
+    );
+    if (instanceTypes.length === 1) return { targets: instanceTypes, kind: 'calls', confidence: 0.9 };
+    return undefined;
   }
   if (qualifier) {
     const qualified = withoutSelf.filter((candidate) => {
@@ -96,11 +103,16 @@ function resolveCall(
       return owner === qualifier;
     });
     if (qualified.length === 1) return { targets: qualified, kind: 'calls', confidence: 0.94 };
+    return undefined;
   }
+  // Bare dunder sites are leftovers of chained calls such as super().__init__();
+  // explicit parent constructors arrive qualified (Base.__init__) and resolve above.
+  if (/^__.*__$/.test(site.name)) return undefined;
   const sameScope = sameFile.filter((candidate) => sameContainer(candidate.containerName, caller.containerName));
   if (sameScope.length === 1) return { targets: sameScope, kind: 'calls', confidence: 0.96 };
   if (sameFile.length === 1) return { targets: sameFile, kind: 'calls', confidence: 0.92 };
   if (withoutSelf.length === 1) return { targets: withoutSelf, kind: 'calls', confidence: 0.88 };
+  if (withoutSelf.length > 4) return undefined;
   return { targets: withoutSelf.slice(0, 4), kind: 'references', confidence: 0.48 };
 }
 
@@ -151,13 +163,10 @@ export function sliceCallGraph(graph: CallGraph, seedId: string | undefined, max
         .filter((node) => /^(?:main|train|run|fit|predict|inference|forward)$/i.test(node.symbolName.split('.').at(-1) ?? ''))
         .slice(0, 24)
         .map((node) => node.id);
-  if (!seedId) {
-    for (const node of graph.nodes.slice(0, maxNodes)) selected.add(node.id);
-  }
   for (const id of roots.length ? roots : graph.nodes.slice(0, Math.min(24, maxNodes)).map((node) => node.id)) {
     selected.add(id);
   }
-  let frontier = seedId ? [...selected] : [];
+  let frontier = [...selected];
   for (let depth = 0; depth < 6 && frontier.length && selected.size < maxNodes; depth += 1) {
     const next: string[] = [];
     for (const id of frontier) {
@@ -173,13 +182,19 @@ export function sliceCallGraph(graph: CallGraph, seedId: string | undefined, max
     }
     frontier = next;
   }
+  const edges = graph.edges.filter((edge) => selected.has(edge.from) && selected.has(edge.to));
+  const connected = new Set(edges.flatMap((edge) => [edge.from, edge.to]));
   const nodes = graph.nodes
-    .filter((node) => selected.has(node.id))
+    .filter(
+      (node) =>
+        selected.has(node.id) &&
+        (connected.has(node.id) || node.id === seedId || (!seedId && roots.includes(node.id)))
+    )
     .map((node) => ({ ...node, root: node.id === seedId || (!seedId && roots.includes(node.id)) }));
   return {
     ...graph,
     nodes,
-    edges: graph.edges.filter((edge) => selected.has(edge.from) && selected.has(edge.to)),
+    edges,
     truncated: selected.size < graph.nodes.length
   };
 }

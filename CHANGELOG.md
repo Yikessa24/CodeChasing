@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.2
+
+- Keep the call graph inside the project: qualified calls on external objects (torch/nn/instance attributes without a matching project class) and super()/library `__init__` calls no longer fall into the ambiguous-reference fallback, removing the hairball of dashed edges between unrelated same-named methods; `self.attribute` still resolves to a uniquely named project class.
+- The unseeded overview now grows from entry functions (main/train/forward/…) through real edges and drops isolated symbols instead of rendering every indexed symbol; the legend states that only project-defined functions are shown.
+
+## 0.29.1
+
+- Keep verified code citations after answer completion: the citation auditor now receives code excerpts prefixed with real file line numbers and applies code-side criteria (operations, control flow, cited line positions), so line-number claims and explanatory paper cross-references no longer invalidate every [C…] anchor; paper anchors keep the strict literal-support rule.
+- Show explicit status labels while auditing citations and extracting the running example, so the pause after streaming ends is visible and cancellable instead of looking frozen.
+
 ## 0.29.0
 
 - Restore the most recent saved conversation automatically on startup (messages, attached paper, running example, and history summary) instead of always opening an empty panel; the ↻ button still starts a fresh chat and the previous conversation is saved first.
