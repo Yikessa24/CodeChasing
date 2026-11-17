@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.29.0
+
+- Restore the most recent saved conversation automatically on startup (messages, attached paper, running example, and history summary) instead of always opening an empty panel; the ↻ button still starts a fresh chat and the previous conversation is saved first.
+- Share one restore path between startup and the ◷ history picker; localize the history/new-chat tooltips, picker text, and empty-history notice into Chinese.
+
 ## 0.28.1
 
 - Restore PDF drag-and-drop into the composer: accept OS file drops and Explorer drags (text/uri-list), reading Explorer paths host-side with a file-scheme guard.

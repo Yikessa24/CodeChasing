@@ -4,7 +4,7 @@ CodeChasing is an early VS Code extension for understanding research code togeth
 
 **评委快速上手 / Judge walkthrough**: step-by-step Chinese guide in [docs/judge-guide.md](docs/judge-guide.md).
 
-This repository currently contains MVP 0.28.1:
+This repository currently contains MVP 0.29.0:
 
 - chat normally without attaching a paper or repository context;
 - import one PDF per VS Code workspace;
@@ -42,7 +42,7 @@ This repository currently contains MVP 0.28.1:
 - render inline and display LaTeX formulas with locally bundled KaTeX;
 - stream model responses token by token with Stop support;
 - archive project conversations while opening every new VS Code session with a blank chat;
-- restore and continue a saved conversation from the history button below the composer;
+- reopen VS Code and continue the most recent conversation automatically, or restore any saved conversation from the history button below the composer;
 - associate imported PDFs with individual conversations, leaving a fresh chat with no paper attached;
 - use a centered empty-chat greeting that disappears after the first message;
 - align user bubbles on the right and assistant answers on the left;
@@ -99,7 +99,7 @@ Open this directory in VS Code and press `F5`, or choose **Run CodeChasing Exten
 
 The selection command also has the default shortcut `Cmd+Alt+P` on macOS and `Ctrl+Alt+P` elsewhere.
 
-CodeChasing starts with a blank conversation and no attached PDF whenever VS Code reloads. Completed conversations and their paper association are saved per workspace. Use the **◷ history icon** to restore a conversation together with its paper, or **↻** to start another blank conversation.
+CodeChasing reopens the most recent saved conversation (with its paper) whenever VS Code reloads. Completed conversations and their paper association are saved per workspace. Use the **◷ history icon** to switch to another saved conversation, or **↻** to start a blank one; the current conversation is saved first.
 
 In the composer, Enter sends and Shift+Enter starts a new line. While a request is running, **Stop** cancels generation but keeps the question. Before an answer appears, Ctrl+C cancels the request and withdraws that pending question (unless you are copying selected text).
 

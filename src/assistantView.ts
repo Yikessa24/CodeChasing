@@ -703,8 +703,8 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
         <button id="model-button" class="icon-button model-button" data-action="configureModel" title="Change model and reasoning effort" aria-label="Change model and reasoning effort">▣ <span id="model-label">…</span></button>
         <button class="icon-button" data-action="manageIndexes" title="Manage paper and code indexes" aria-label="Manage indexes">⋯</button>
         <button class="icon-button" data-action="moveToRight" title="Move CodeChasing to the right side" aria-label="Move CodeChasing to the right side">⇥</button>
-        <button class="icon-button" data-action="openConversationHistory" title="Conversation history" aria-label="Conversation history">◷</button>
-        <button class="icon-button" data-action="clearConversation" title="New chat" aria-label="New chat">↻</button>
+        <button class="icon-button" data-action="openConversationHistory" title="历史对话：选择并继续之前的对话" aria-label="历史对话">◷</button>
+        <button class="icon-button" data-action="clearConversation" title="新对话（当前对话会自动存入历史）" aria-label="新对话">↻</button>
         <span class="keyboard-hint">Enter send · Shift+Enter newline</span>
       </div>
     </footer>

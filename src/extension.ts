@@ -165,11 +165,18 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   public async initialize(): Promise<void> {
     const previouslySelectedPaper = await this.paperStore.getCurrent();
     await this.migrateLegacyConversation(previouslySelectedPaper?.metadata.hash);
-    await this.paperStore.selectCurrent(undefined);
-    this.startEmptyConversation();
-    this.assistantView.setConversation([]);
-    this.assistantView.setPaper(undefined);
-    this.assistantView.setMappingCount(0);
+    const latest = this.savedConversations().sort(
+      (left, right) => right.updatedAt - left.updatedAt
+    )[0];
+    if (latest) {
+      await this.restoreSavedConversation(latest, false);
+    } else {
+      await this.paperStore.selectCurrent(undefined);
+      this.startEmptyConversation();
+      this.assistantView.setConversation([]);
+      this.assistantView.setPaper(undefined);
+      this.assistantView.setMappingCount(0);
+    }
     const statusConfig = await this.providerConfigurationWithSecret();
     this.assistantView.setModelStatus(statusConfig, this.modelDisplayNames.get(statusConfig.model));
     if (!this.context.globalState.get<boolean>(RIGHT_SIDEBAR_PROMPT_KEY, false)) {
@@ -1975,19 +1982,19 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       (left, right) => right.updatedAt - left.updatedAt
     );
     if (conversations.length === 0) {
-      void vscode.window.showInformationMessage('No saved CodeChasing conversations yet.');
+      void vscode.window.showInformationMessage('还没有已保存的对话。每次提问回答后会自动保存，点 ↻ 可开始新对话。');
       return;
     }
     const selected = await vscode.window.showQuickPick(
       conversations.map((conversation) => ({
         label: conversation.title,
         description: new Date(conversation.updatedAt).toLocaleString(),
-        detail: `${conversation.messages.filter((message) => message.role === 'user').length} questions`,
+        detail: `${conversation.messages.filter((message) => message.role === 'user').length} 个问题`,
         conversation
       })),
       {
-        title: 'CodeChasing conversation history',
-        placeHolder: 'Choose a conversation to continue'
+        title: 'CodeChasing 历史对话',
+        placeHolder: '选择一条对话继续（当前对话会先自动保存）'
       }
     );
     if (!selected) {
@@ -1995,17 +2002,24 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     }
     await this.cancelRequest(true);
     await this.saveCurrentConversation();
+    await this.restoreSavedConversation(selected.conversation);
+  }
+
+  private async restoreSavedConversation(
+    conversation: SavedConversation,
+    reveal = true
+  ): Promise<void> {
     this.paperAttachmentGeneration += 1;
     this.activePaperIndex?.abort();
     this.activePaperIndex = undefined;
     this.assistantView.cancelPaperPreview(this.currentPaperHash);
-    this.conversationId = selected.conversation.id;
-    this.conversationCreatedAt = selected.conversation.createdAt;
+    this.conversationId = conversation.id;
+    this.conversationCreatedAt = conversation.createdAt;
     this.historySummaryController?.abort();
-    this.chatHistory = selected.conversation.messages;
-    this.persistentExample = selected.conversation.persistentExample;
-    this.historySummary = selected.conversation.historySummary;
-    this.currentPaperHash = selected.conversation.paperHash;
+    this.chatHistory = conversation.messages;
+    this.persistentExample = conversation.persistentExample;
+    this.historySummary = conversation.historySummary;
+    this.currentPaperHash = conversation.paperHash;
     this.pendingPaperAttachmentHash = undefined;
     this.paperBackgroundReady = false;
     await this.paperStore.selectCurrent(this.currentPaperHash);
@@ -2022,7 +2036,9 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     }
     this.assistantView.setConversation(this.chatHistory);
     this.assistantView.setPersistentExample(this.persistentExample);
-    await this.assistantView.reveal();
+    if (reveal) {
+      await this.assistantView.reveal();
+    }
     void this.refreshHistorySummary();
   }
 
