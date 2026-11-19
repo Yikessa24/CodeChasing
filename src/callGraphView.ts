@@ -60,7 +60,7 @@ export class CallGraphView implements vscode.Disposable {
     }
     this.panel.title = `Call Graph · ${graph.nodes.length} symbols`;
     this.panel.webview.html = this.html(graph, this.panel.webview);
-    this.panel.reveal(vscode.ViewColumn.Active, true);
+    this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Active, true);
   }
 
   public dispose(): void {

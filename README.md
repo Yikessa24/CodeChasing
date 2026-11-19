@@ -4,7 +4,7 @@ CodeChasing is an early VS Code extension for understanding research code togeth
 
 **评委快速上手 / Judge walkthrough**: step-by-step Chinese guide in [docs/judge-guide.md](docs/judge-guide.md).
 
-This repository currently contains MVP 0.30.1:
+This repository currently contains MVP 0.30.3:
 
 - chat normally without attaching a paper or repository context;
 - import one PDF per VS Code workspace;

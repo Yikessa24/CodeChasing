@@ -2231,7 +2231,29 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const document = await vscode.workspace.openTextDocument(uri);
     const start = Math.max(0, startLine - 1);
     const end = Math.min(document.lineCount - 1, Math.max(start, endLine - 1));
-    const editor = await vscode.window.showTextDocument(document, { preview: false });
+    // Keep a single code group: drop stray non-dirty tabs of this file elsewhere
+    // before revealing, otherwise every citation jump widens the editor layout.
+    const key = uri.toString();
+    for (;;) {
+      const stray = vscode.window.visibleTextEditors.find(
+        (candidate) =>
+          candidate.viewColumn !== vscode.ViewColumn.One &&
+          candidate.document.uri.toString() === key &&
+          !candidate.document.isDirty
+      );
+      if (!stray) {
+        break;
+      }
+      await vscode.window.showTextDocument(stray.document, {
+        preview: false,
+        viewColumn: stray.viewColumn
+      });
+      await vscode.commands.executeCommand('workbench.action.closeActiveEditor');
+    }
+    const editor = await vscode.window.showTextDocument(document, {
+      preview: false,
+      viewColumn: vscode.ViewColumn.One
+    });
     const range = new vscode.Range(start, 0, end, document.lineAt(end).text.length);
     editor.selection = new vscode.Selection(range.start, range.end);
     editor.revealRange(range, vscode.TextEditorRevealType.InCenter);

@@ -79,7 +79,7 @@ export class PdfViewer implements vscode.Disposable {
 
   public async preload(paper: PaperMetadata): Promise<void> {
     await this.ensurePanel(paper, {
-      viewColumn: vscode.ViewColumn.Active,
+      viewColumn: vscode.ViewColumn.Two,
       preserveFocus: true
     });
   }
@@ -87,10 +87,9 @@ export class PdfViewer implements vscode.Disposable {
   public async open(paper: PaperMetadata): Promise<void> {
     this.onViewerStatus?.(this.readyPaperHash === paper.hash ? 'ready' : 'loading');
     await this.ensurePanel(paper, {
-      viewColumn: vscode.ViewColumn.Beside,
+      viewColumn: vscode.ViewColumn.Two,
       preserveFocus: false
     });
-    this.panel?.reveal(vscode.ViewColumn.Beside, false);
   }
 
   private async ensurePanel(
@@ -180,7 +179,7 @@ export class PdfViewer implements vscode.Disposable {
       );
     } else if (!showOptions.preserveFocus) {
       this.panel.title = `Paper: ${paper.title}`;
-      this.panel.reveal(showOptions.viewColumn, false);
+      this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Two, false);
     }
     if (shouldReload) {
       this.panel.webview.options = {
@@ -200,7 +199,7 @@ export class PdfViewer implements vscode.Disposable {
     if (!this.panel || !this.currentPaper) {
       return;
     }
-    this.panel.reveal(vscode.ViewColumn.Beside, false);
+    this.panel.reveal(this.panel.viewColumn ?? vscode.ViewColumn.Two, false);
     await this.postHighlight(chunk);
   }
 

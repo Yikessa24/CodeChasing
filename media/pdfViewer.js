@@ -81,9 +81,11 @@ function applyZoom() {
 }
 
 function setZoom(nextZoom) {
+  const anchor = scrollAnchor();
   fitMode = false;
   zoom = clampZoom(nextZoom);
   applyZoom();
+  restoreScrollAnchor(anchor);
 }
 
 function fitToWidth() {
@@ -92,10 +94,42 @@ function fitToWidth() {
   if (!baseWidth) {
     return;
   }
+  const anchor = scrollAnchor();
   fitMode = true;
   const availableWidth = Math.max(240, document.documentElement.clientWidth - 40);
   zoom = clampZoom(availableWidth / baseWidth);
   applyZoom();
+  restoreScrollAnchor(anchor);
+}
+
+// Zoom rescales every page height, so a fixed scrollTop drifts to other pages;
+// keep the viewport centered on the same page point across the change.
+function scrollAnchor() {
+  const viewCenter = pagesRoot.scrollTop + pagesRoot.clientHeight / 2;
+  const scrollerTop = pagesRoot.getBoundingClientRect().top;
+  const containers = [...renderedPages.values()].sort(
+    (a, b) => Number(a.dataset.page) - Number(b.dataset.page)
+  );
+  let anchor;
+  for (const container of containers) {
+    const top = container.getBoundingClientRect().top - scrollerTop + pagesRoot.scrollTop;
+    if (top > viewCenter) {
+      break;
+    }
+    const height = container.offsetHeight;
+    anchor = { container, fraction: height ? (viewCenter - top) / height : 0 };
+  }
+  return anchor;
+}
+
+function restoreScrollAnchor(anchor) {
+  if (!anchor) {
+    return;
+  }
+  const scrollerTop = pagesRoot.getBoundingClientRect().top;
+  const top = anchor.container.getBoundingClientRect().top - scrollerTop + pagesRoot.scrollTop;
+  pagesRoot.scrollTop =
+    top + anchor.fraction * anchor.container.offsetHeight - pagesRoot.clientHeight / 2;
 }
 
 zoomOut.addEventListener('click', () => setZoom(zoom - ZOOM_STEP));

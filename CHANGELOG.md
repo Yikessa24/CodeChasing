@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.30.3
+
+- Keep the window at four panes (file tree, code, paper, assistant): code citation jumps always reuse the first editor group and close stray non-dirty tabs of the same file in other groups, instead of opening a new group beside whichever group happened to be active; the paper viewer is created in the second group and citation highlights reveal it in place instead of moving it beside the active group; the call graph panel likewise reveals in its own group.
+
+## 0.30.2
+
+- Keep the reading position when zooming: zoom and fit-to-width now remember which page point sits at the viewport center and restore it after rescaling, instead of leaving the pixel scroll offset untouched and drifting back toward page 1.
+
 ## 0.30.1
 
 - Fix PDF opens stalling or failing inside the webview: fetch the pdf.js worker script and the PDF bytes on the main thread (in parallel, browser-cacheable) and start the worker from a same-origin blob so it never issues network requests; the previous cross-origin blob-wrapper import and in-worker PDF fetch could stall indefinitely in VS Code webviews.
