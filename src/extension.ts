@@ -56,6 +56,7 @@ import type {
   ModelImageInput,
   PaperCitation,
   PaperAttachmentReference,
+  PaperMetadata,
   PaperRecord,
   PaperTextSelection,
   PersistentExample,
@@ -163,6 +164,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   }
 
   public async initialize(): Promise<void> {
+    await this.pdfViewer.startAssets();
     const previouslySelectedPaper = await this.paperStore.getCurrent();
     await this.migrateLegacyConversation(previouslySelectedPaper?.metadata.hash);
     const latest = this.savedConversations().sort(
@@ -273,6 +275,14 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
         this.assistantView.setPaper(metadata, true);
       }
     }
+  }
+
+  public pdfAssetBase(): string | undefined {
+    return this.pdfViewer.assetBase();
+  }
+
+  public registerPaperAsset(paper: PaperMetadata): void {
+    this.pdfViewer.registerPaperAsset(paper);
   }
 
   public async openPaper(): Promise<void> {
@@ -415,6 +425,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     signal?: AbortSignal
   ): Promise<boolean> {
     try {
+      this.pdfViewer.registerPaperAsset(metadata);
       const bytes = await abortable(() => this.pdfViewer.preparedBytes(metadata), signal);
       const preview = await abortable(
         () => this.assistantView.preparePaperPreview(metadata, bytes),

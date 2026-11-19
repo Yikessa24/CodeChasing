@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.30.1
+
+- Fix PDF opens stalling or failing inside the webview: fetch the pdf.js worker script and the PDF bytes on the main thread (in parallel, browser-cacheable) and start the worker from a same-origin blob so it never issues network requests; the previous cross-origin blob-wrapper import and in-worker PDF fetch could stall indefinitely in VS Code webviews.
+- Serialize text-layer re-renders on zoom/resize: concurrent TextLayerBuilder renders cancelled each other, which could abort the whole open when the panel resized during first-page rendering.
+- Log per-stage progress (imports / fetch / document / firstPage) and stage-tagged errors to the "CodeChasing PDF" output channel so a stall can be localized to one step.
+
+## 0.30.0
+
+- Open PDFs through a loopback-only HTTP asset server (127.0.0.1, unguessable per-session token path, allowlisted pdf.js modules and registered paper hashes): the webview can browser-cache the pdf.js modules and stream PDF byte ranges in parallel instead of serializing every resource through the webview IPC protocol; falls back to webview resource URIs when the server cannot bind.
+- Stream the assistant's hidden first-page preview from the same server instead of base64 chunks when it is available.
+- Report per-open timing diagnostics (module imports, document load, first page, transport) to a "CodeChasing PDF" output channel.
+
 ## 0.29.2
 
 - Keep the call graph inside the project: qualified calls on external objects (torch/nn/instance attributes without a matching project class) and super()/library `__init__` calls no longer fall into the ambiguous-reference fallback, removing the hairball of dashed edges between unrelated same-named methods; `self.attribute` still resolves to a uniquely named project class.

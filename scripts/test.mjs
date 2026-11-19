@@ -795,14 +795,33 @@ assert.match(
   /setProperty\('--total-scale-factor', String\(textViewport\.scale\)\)/
 );
 assert.match(pdfViewerScript, /disableNormalization: true/);
-assert.match(pdfViewerScript, /textLayerRecord\.builder\.render\(\{ viewport: scaledViewport \}\)/);
+assert.match(pdfViewerScript, /textLayerRecord\.render\(scaledViewport\)/);
 assert.doesNotMatch(pdfViewerScript, /textLayer\.style\.transform = `scale/);
 assert.match(pdfViewerScript, /globalThis\.pdfjsLib = pdfjsLib/);
 assert.match(pdfViewerScript, /import\(config\.viewerModule\)/);
 assert.doesNotMatch(pdfViewerScript, /pdfDataChunk|atob\(/);
-assert.match(pdfViewerScript, /getDocument\(\{ url: config\.pdfUrl, wasmUrl: config\.wasmUrl \}\)/);
+assert.match(
+  pdfViewerScript,
+  /getDocument\(\{\s*data: new Uint8Array\(pdfBuffer\),\s*wasmUrl: config\.wasmUrl\s*\}\)/
+);
+assert.match(pdfViewerScript, /new Blob\(\[workerText\], \{ type: 'text\/javascript' \}\)/);
+assert.match(pdfViewerScript, /type: 'pdfStage'/);
+const assistantPreviewScript = await readFile('media/assistant.js', 'utf8');
+assert.match(assistantPreviewScript, /new Blob\(\[workerText\], \{ type: 'text\/javascript' \}\)/);
+assert.match(assistantPreviewScript, /getDocument\(\{ data: bytes, wasmUrl: job\.wasmUrl \}\)/);
 const pdfViewerSource = await readFile('src/pdfViewer.ts', 'utf8');
-assert.match(pdfViewerSource, /pdfUrl: webview\.asWebviewUri\(vscode\.Uri\.parse\(paper\.storedPdfUri\)\)/);
+assert.match(
+  pdfViewerSource,
+  /webview\.asWebviewUri\(vscode\.Uri\.parse\(paper\.storedPdfUri\)\)/
+);
+assert.match(pdfViewerSource, /\$\{assetBase\}\/pdf\/\$\{paper\.hash\}/);
+assert.match(pdfViewerSource, /http:\/\/127\.0\.0\.1:\*/);
+assert.match(pdfViewerSource, /data\.type === 'pdfTimings'/);
+assert.match(pdfViewerSource, /data\.type === 'pdfStage'/);
+assert.match(pdfViewerScript, /type: 'pdfTimings'/);
+assert.match(extensionSource, /await this\.pdfViewer\.startAssets\(\)/);
+assert.match(extensionSource, /public pdfAssetBase\(\)/);
+assert.match(extensionSource, /public registerPaperAsset\(paper: PaperMetadata\)/);
 assert.doesNotMatch(pdfViewerSource, /pdfDataChunk/);
 assert.match(pdfViewerScript, /type: 'askPdfSelection', hash: config\.hash/);
 assert.match(pdfViewerScript, /loadingTask\.destroy\(\)/);
@@ -1019,4 +1038,74 @@ assert.deepEqual(
   'bare arrays are accepted'
 );
 
-console.log('agentic exploration, retrieval, rerank, citations, streaming, Markdown, history compression, and PDF tests passed');
+const assetBuild = await build({
+  entryPoints: ['src/pdfAssetServer.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  write: false,
+  logLevel: 'silent'
+});
+const assetModule = { exports: {} };
+vm.runInNewContext(assetBuild.outputFiles[0].text, {
+  require,
+  module: assetModule,
+  exports: assetModule.exports,
+  console,
+  process,
+  Buffer,
+  URL,
+  setTimeout,
+  clearTimeout
+});
+const { mkdtemp, writeFile, rm } = await import('node:fs/promises');
+const { tmpdir } = await import('node:os');
+const assetRoot = await mkdtemp(resolve(tmpdir(), 'codechasing-assets-'));
+await writeFile(resolve(assetRoot, 'pdf.mjs'), 'export const marker = 42;\n');
+const paperBytes = Buffer.from('%PDF-1.7 fake paper bytes for range tests 0123456789');
+const paperPath = resolve(assetRoot, 'paper.pdf');
+await writeFile(paperPath, paperBytes);
+const assetServer = new assetModule.exports.PdfAssetServer(assetRoot);
+try {
+  const port = await assetServer.start();
+  assert.ok(port, 'asset server should bind a loopback port');
+  const base = assetServer.base();
+  assert.match(base, /^http:\/\/127\.0\.0\.1:\d+\/t\/[0-9a-f]{32}$/);
+  assetServer.registerPaper('abc123', paperPath);
+  const libResponse = await fetch(`${base}/lib/pdf.mjs`);
+  assert.equal(libResponse.status, 200);
+  assert.equal(await libResponse.text(), 'export const marker = 42;\n');
+  assert.equal(libResponse.headers.get('access-control-allow-origin'), '*');
+  const rangeResponse = await fetch(`${base}/pdf/abc123`, { headers: { Range: 'bytes=0-9' } });
+  assert.equal(rangeResponse.status, 206);
+  assert.equal(rangeResponse.headers.get('content-range'), `bytes 0-9/${paperBytes.length}`);
+  assert.deepEqual(Buffer.from(await rangeResponse.arrayBuffer()), paperBytes.subarray(0, 10));
+  assert.match(rangeResponse.headers.get('cache-control'), /immutable/);
+  const suffixResponse = await fetch(`${base}/pdf/abc123`, { headers: { Range: 'bytes=-5' } });
+  assert.equal(suffixResponse.status, 206);
+  assert.deepEqual(Buffer.from(await suffixResponse.arrayBuffer()), paperBytes.subarray(-5));
+  const badRange = await fetch(`${base}/pdf/abc123`, {
+    headers: { Range: `bytes=${paperBytes.length + 10}-` }
+  });
+  assert.equal(badRange.status, 416);
+  const headResponse = await fetch(`${base}/pdf/abc123`, { method: 'HEAD' });
+  assert.equal(headResponse.status, 200);
+  assert.equal((await headResponse.arrayBuffer()).byteLength, 0);
+  assert.equal((await fetch(`${base}/pdf/unknown`)).status, 404);
+  assert.equal((await fetch(`${base}/wasm/missing.wasm`)).status, 404);
+  assert.equal((await fetch(`${base}/lib/pdf.worker.mjs`)).status, 404, 'missing lib files return 404');
+  assert.equal((await fetch(`http://127.0.0.1:${port}/t/wrongtoken/lib/pdf.mjs`)).status, 404);
+  assert.equal((await fetch(`http://127.0.0.1:${port}/lib/pdf.mjs`)).status, 404);
+  const secondServer = new assetModule.exports.PdfAssetServer(assetRoot);
+  try {
+    const secondPort = await secondServer.start();
+    assert.ok(secondPort && secondPort !== port, 'port conflict falls back to an ephemeral port');
+  } finally {
+    secondServer.dispose();
+  }
+} finally {
+  assetServer.dispose();
+  await rm(assetRoot, { recursive: true, force: true });
+}
+
+console.log('agentic exploration, retrieval, rerank, citations, streaming, Markdown, history compression, PDF, and loopback asset server tests passed');

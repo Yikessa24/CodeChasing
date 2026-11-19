@@ -1,5 +1,6 @@
 const vscode = acquireVsCodeApi();
 const config = window.codeChasingPaper;
+const startedAt = performance.now();
 const pagesRoot = document.getElementById('pages');
 const status = document.getElementById('status');
 const zoomOut = document.getElementById('zoom-out');
@@ -66,7 +67,7 @@ function updatePageSize(container) {
       '--total-scale-factor',
       String(scaledViewport.scale)
     );
-    void textLayerRecord.builder.render({ viewport: scaledViewport });
+    textLayerRecord.render(scaledViewport);
   }
 }
 
@@ -402,7 +403,7 @@ async function createPageShell(pdf, pageNumber) {
   return container;
 }
 
-async function renderPage(pdf, pageNumber) {
+async function renderPage(pdf, pageNumber, onCanvas) {
   if (renderPromises.has(pageNumber)) {
     return renderPromises.get(pageNumber);
   }
@@ -427,27 +428,44 @@ async function renderPage(pdf, pageNumber) {
     textLayerElement.style.width = `${textViewport.width}px`;
     textLayerElement.style.height = `${textViewport.height}px`;
     textLayerElement.style.setProperty('--total-scale-factor', String(textViewport.scale));
-    textLayers.set(pageNumber, {
+    const record = {
       builder: textLayerBuilder,
       element: textLayerElement,
       page,
-      baseScale: viewport.scale
-    });
-    await Promise.all([
-      page.render({
-        canvasContext: canvas.getContext('2d'),
-        viewport,
-        transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0]
-      }).promise,
-      textLayerBuilder.render({
-        viewport: textViewport,
-        textContentParams: { includeMarkedContent: true, disableNormalization: true }
-      }).then(() => {
-        if (!textLayerElement.isConnected) {
-          container.append(textLayerElement);
+      baseScale: viewport.scale,
+      lastScale: undefined,
+      queue: Promise.resolve(),
+      render(nextViewport) {
+        if (nextViewport.scale === record.lastScale) {
+          return record.queue;
         }
-      })
-    ]);
+        record.lastScale = nextViewport.scale;
+        // Concurrent TextLayerBuilder.render calls cancel each other; queue them.
+        record.queue = record.queue.then(() =>
+          textLayerBuilder
+            .render({
+              viewport: nextViewport,
+              textContentParams: { includeMarkedContent: true, disableNormalization: true }
+            })
+            .then(() => {
+              if (!textLayerElement.isConnected) {
+                container.append(textLayerElement);
+              }
+            })
+            .catch(() => undefined)
+        );
+        return record.queue;
+      }
+    };
+    textLayers.set(pageNumber, record);
+    const canvasDone = page.render({
+      canvasContext: canvas.getContext('2d'),
+      viewport,
+      transform: outputScale === 1 ? null : [outputScale, 0, 0, outputScale, 0, 0]
+    }).promise.then(() => {
+      onCanvas?.();
+    });
+    await Promise.all([canvasDone, record.render(textViewport)]);
     pageObserver.unobserve(container);
   })();
   renderPromises.set(pageNumber, task);
@@ -463,16 +481,50 @@ async function prepareRemainingPages(pdf) {
 }
 
 async function render() {
+  let stageName = 'start';
+  const stage = (name) => {
+    stageName = name;
+    const ms = Math.round(performance.now() - startedAt);
+    console.info(`[codechasing-pdf] ${name} ${ms}ms`);
+    vscode.postMessage({ type: 'pdfStage', hash: config.hash, stage: name, ms });
+  };
   try {
     pdfjsLib = await import(config.pdfModule);
     // pdf_viewer.mjs destructures globalThis.pdfjsLib at module evaluation time.
     globalThis.pdfjsLib = pdfjsLib;
     pdfjsViewer = await import(config.viewerModule);
-    pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerModule;
+    const importsMs = Math.round(performance.now() - startedAt);
+    stage('imports');
     status.textContent = 'Opening PDF…';
-    const loadingTask = pdfjsLib.getDocument({ url: config.pdfUrl, wasmUrl: config.wasmUrl });
+    // Webview in-worker network stalls are opaque; fetch on the main thread and
+    // run the worker from a same-origin blob so it never touches the network.
+    const [workerText, pdfBuffer] = await Promise.all([
+      fetch(config.workerModule).then((response) => {
+        if (!response.ok) {
+          throw new Error(`worker fetch ${response.status}`);
+        }
+        return response.text();
+      }),
+      fetch(config.pdfUrl).then((response) => {
+        if (!response.ok) {
+          throw new Error(`pdf fetch ${response.status}`);
+        }
+        return response.arrayBuffer();
+      })
+    ]);
+    pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+      new Blob([workerText], { type: 'text/javascript' })
+    );
+    const fetchMs = Math.round(performance.now() - startedAt);
+    stage('fetch');
+    const loadingTask = pdfjsLib.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      wasmUrl: config.wasmUrl
+    });
     window.addEventListener('pagehide', () => void loadingTask.destroy(), { once: true });
     const pdf = await loadingTask.promise;
+    const documentMs = Math.round(performance.now() - startedAt);
+    stage('document');
     pageObserver = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -489,10 +541,23 @@ async function render() {
     status.textContent = `${pdf.numPages} pages · opening…`;
     await createPageShell(pdf, 1);
     fitToWidth();
-    await renderPage(pdf, 1);
+    await renderPage(pdf, 1, () => startupPreview?.remove());
+    const firstPageMs = Math.round(performance.now() - startedAt);
+    stage('firstPage');
     startupPreview?.remove();
     status.textContent = `${pdf.numPages} pages · ready`;
     vscode.postMessage({ type: 'pdfReady', hash: config.hash, pages: pdf.numPages });
+    vscode.postMessage({
+      type: 'pdfTimings',
+      hash: config.hash,
+      timings: {
+        importsMs,
+        fetchMs,
+        documentMs,
+        firstPageMs,
+        transport: config.pdfUrl.startsWith('http://127.0.0.1') ? 'loopback-http' : 'webview-resource'
+      }
+    });
 
     void prepareRemainingPages(pdf).catch(() => undefined);
   } catch (error) {
@@ -500,7 +565,7 @@ async function render() {
     vscode.postMessage({
       type: 'pdfError',
       hash: config.hash,
-      message: error instanceof Error ? error.message : String(error)
+      message: `${stageName}: ${error instanceof Error ? error.message : String(error)}`
     });
   }
 }

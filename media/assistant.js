@@ -794,16 +794,41 @@ async function renderPaperPreview(job) {
       });
     }
     const pdfjs = await import(job.pdfModule);
-    pdfjs.GlobalWorkerOptions.workerSrc = job.workerModule;
-    const binary = atob(job.chunks.join(''));
-    if (job.cancelled) {
-      return;
+    let bytes;
+    if (job.pdfUrl) {
+      const [workerText, buffer] = await Promise.all([
+        fetch(job.workerModule).then((response) => {
+          if (!response.ok) {
+            throw new Error(`worker fetch ${response.status}`);
+          }
+          return response.text();
+        }),
+        fetch(job.pdfUrl).then((response) => {
+          if (!response.ok) {
+            throw new Error(`pdf fetch ${response.status}`);
+          }
+          return response.arrayBuffer();
+        })
+      ]);
+      if (job.cancelled) {
+        return;
+      }
+      pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
+        new Blob([workerText], { type: 'text/javascript' })
+      );
+      bytes = new Uint8Array(buffer);
+    } else {
+      pdfjs.GlobalWorkerOptions.workerSrc = job.workerModule;
+      const binary = atob(job.chunks.join(''));
+      if (job.cancelled) {
+        return;
+      }
+      bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) {
+        bytes[index] = binary.charCodeAt(index);
+      }
+      job.chunks = [];
     }
-    const bytes = new Uint8Array(binary.length);
-    for (let index = 0; index < binary.length; index += 1) {
-      bytes[index] = binary.charCodeAt(index);
-    }
-    job.chunks = [];
     job.loadingTask = pdfjs.getDocument({ data: bytes, wasmUrl: job.wasmUrl });
     const pdf = await job.loadingTask.promise;
     if (job.cancelled) {
@@ -1134,6 +1159,7 @@ window.addEventListener('message', (event) => {
         pdfModule: message.pdfModule,
         workerModule: message.workerModule,
         wasmUrl: message.wasmUrl,
+        pdfUrl: message.pdfUrl,
         chunks: new Array(Number(message.chunkCount) || 0),
         cancelled: false
       });

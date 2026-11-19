@@ -4,7 +4,7 @@ CodeChasing is an early VS Code extension for understanding research code togeth
 
 **评委快速上手 / Judge walkthrough**: step-by-step Chinese guide in [docs/judge-guide.md](docs/judge-guide.md).
 
-This repository currently contains MVP 0.29.2:
+This repository currently contains MVP 0.30.1:
 
 - chat normally without attaching a paper or repository context;
 - import one PDF per VS Code workspace;
@@ -33,7 +33,7 @@ This repository currently contains MVP 0.29.2:
 - use compact paper, code, model, and new-chat tools below the composer;
 - switch model and reasoning effort from one combined composer control whose picker lists model names (provider model list plus a cross-family suggestion list including Gemini) and effort levels in separate sections;
 - validate manually entered model names against the known list and a provider existence probe before saving them;
-- open papers faster with first-page priority and lazy rendering for later pages;
+- open papers faster over a loopback-only HTTP asset server (browser-cached pdf.js modules, parallel range streaming) with first-page priority and lazy rendering for later pages;
 - zoom PDF pages in or out and restore fit-to-width from the viewer toolbar;
 - select and copy PDF text at every zoom level through a synchronized PDF.js text layer;
 - select a passage inside one PDF page, click **询问这段**, and ask about it with its exact page and selection rectangles pinned as evidence;

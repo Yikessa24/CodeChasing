@@ -37,6 +37,8 @@ export interface AssistantHandlers {
   manageMappings(): Promise<void>;
   showPersistentExample(): Promise<void>;
   resetPersistentExample(): Promise<void>;
+  pdfAssetBase(): string | undefined;
+  registerPaperAsset(paper: PaperMetadata): void;
   openEvidence(citation: {
     chunkId: string;
     paperHash?: string;
@@ -371,18 +373,29 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
       this.pendingPaperPreviews.delete(paper.hash);
     }
     const webview = this.view.webview;
-    const pdfModule = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.mjs')
-    );
-    const workerModule = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.worker.mjs')
-    );
-    const wasmUrl = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'wasm')
-    );
-    const encoded = Buffer.from(bytes).toString('base64');
+    const assetBase = this.handlers.pdfAssetBase();
+    this.handlers.registerPaperAsset(paper);
+    const pdfModule = assetBase
+      ? `${assetBase}/lib/pdf.mjs`
+      : webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.mjs'))
+          .toString();
+    const workerModule = assetBase
+      ? `${assetBase}/lib/pdf.worker.mjs`
+      : webview
+          .asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.worker.mjs')
+          )
+          .toString();
+    const wasmUrl = assetBase
+      ? `${assetBase}/wasm/`
+      : `${webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'wasm'))
+          .toString()}/`;
+    const pdfUrl = assetBase ? `${assetBase}/pdf/${paper.hash}` : undefined;
+    const encoded = pdfUrl ? '' : Buffer.from(bytes).toString('base64');
     const chunkSize = 512 * 1024;
-    const chunkCount = Math.ceil(encoded.length / chunkSize);
+    const chunkCount = pdfUrl ? 0 : Math.ceil(encoded.length / chunkSize);
     const result = new Promise<{ dataUrl: string; width: number; height: number }>(
       (resolve, reject) => {
         const timer = setTimeout(() => {
@@ -397,9 +410,10 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
       const delivered = await webview.postMessage({
         type: 'paperPreviewStart',
         hash: paper.hash,
-        pdfModule: pdfModule.toString(),
-        workerModule: workerModule.toString(),
-        wasmUrl: `${wasmUrl.toString()}/`,
+        pdfModule,
+        workerModule,
+        wasmUrl,
+        pdfUrl,
         chunkCount
       });
       if (!delivered) throw new Error('PDF renderer is no longer available.');
@@ -644,7 +658,7 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource};" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; font-src ${webview.cspSource}; script-src 'nonce-${scriptNonce}' ${webview.cspSource} http://127.0.0.1:*; worker-src blob: ${webview.cspSource} http://127.0.0.1:*; connect-src ${webview.cspSource} http://127.0.0.1:*;" />
     <link rel="stylesheet" href="${katexStyle}" />
     <link rel="stylesheet" href="${style}?v=${scriptNonce}" />
     <title>CodeChasing</title>

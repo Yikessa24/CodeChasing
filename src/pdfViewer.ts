@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PdfAssetServer } from './pdfAssetServer.js';
 import type { NormalizedBox, PaperChunk, PaperMetadata, PaperTextSelection } from './types.js';
 
 function nonce(): string {
@@ -19,12 +20,31 @@ export class PdfViewer implements vscode.Disposable {
   >();
   private readyPaperHash: string | undefined;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly assets: PdfAssetServer;
+  private timingsChannel: vscode.OutputChannel | undefined;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly onAskSelection?: (selection: PaperTextSelection) => Promise<void>,
     private readonly onViewerStatus?: (status: 'loading' | 'ready' | 'failed') => void
-  ) {}
+  ) {
+    this.assets = new PdfAssetServer(
+      vscode.Uri.joinPath(context.extensionUri, 'dist', 'pdfjs').fsPath
+    );
+    this.disposables.push(this.assets);
+  }
+
+  public async startAssets(): Promise<void> {
+    await this.assets.start();
+  }
+
+  public assetBase(): string | undefined {
+    return this.assets.base();
+  }
+
+  public registerPaperAsset(paper: PaperMetadata): void {
+    this.assets.registerPaper(paper.hash, vscode.Uri.parse(paper.storedPdfUri).fsPath);
+  }
 
   public async prepare(paper: PaperMetadata): Promise<void> {
     if (this.preparedPdfs.has(paper.hash)) {
@@ -84,6 +104,8 @@ export class PdfViewer implements vscode.Disposable {
       this.readyPaperHash = undefined;
     }
     this.currentPaper = paper;
+    this.registerPaperAsset(paper);
+    await this.assets.start();
     if (!this.panel) {
       this.panel = vscode.window.createWebviewPanel(
         'codeChasing.paperViewer',
@@ -123,7 +145,15 @@ export class PdfViewer implements vscode.Disposable {
             this.readyPaperHash = this.currentPaper?.hash;
             this.onViewerStatus?.('ready');
           } else if (data.type === 'pdfError' && data.hash === this.currentPaper?.hash) {
+            this.timingsChannel ??= vscode.window.createOutputChannel('CodeChasing PDF');
+            this.timingsChannel.appendLine(`error ${String(data.message)}`);
             this.onViewerStatus?.('failed');
+          } else if (data.type === 'pdfStage' && data.hash === this.currentPaper?.hash) {
+            this.timingsChannel ??= vscode.window.createOutputChannel('CodeChasing PDF');
+            this.timingsChannel.appendLine(`stage ${String(data.stage)} ${String(data.ms)}ms`);
+          } else if (data.type === 'pdfTimings' && data.hash === this.currentPaper?.hash) {
+            this.timingsChannel ??= vscode.window.createOutputChannel('CodeChasing PDF');
+            this.timingsChannel.appendLine(JSON.stringify(data.timings));
           } else if (
             data.type === 'askPdfSelection' &&
             this.currentPaper &&
@@ -191,6 +221,7 @@ export class PdfViewer implements vscode.Disposable {
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+    this.timingsChannel?.dispose();
     this.preparedPdfs.clear();
     this.preparedPreviews.clear();
   }
@@ -210,18 +241,34 @@ export class PdfViewer implements vscode.Disposable {
   }
 
   private html(webview: vscode.Webview, paper: PaperMetadata): string {
-    const pdfModule = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.mjs')
-    );
-    const workerModule = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.worker.mjs')
-    );
-    const viewerModule = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf_viewer.mjs')
-    );
-    const wasmUrl = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'wasm')
-    );
+    const assetBase = this.assets.base();
+    const pdfModule = assetBase
+      ? `${assetBase}/lib/pdf.mjs`
+      : webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.mjs'))
+          .toString();
+    const workerModule = assetBase
+      ? `${assetBase}/lib/pdf.worker.mjs`
+      : webview
+          .asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf.worker.mjs')
+          )
+          .toString();
+    const viewerModule = assetBase
+      ? `${assetBase}/lib/pdf_viewer.mjs`
+      : webview
+          .asWebviewUri(
+            vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'pdf_viewer.mjs')
+          )
+          .toString();
+    const wasmUrl = assetBase
+      ? `${assetBase}/wasm/`
+      : `${webview
+          .asWebviewUri(vscode.Uri.joinPath(this.context.extensionUri, 'dist', 'pdfjs', 'wasm'))
+          .toString()}/`;
+    const pdfUrl = assetBase
+      ? `${assetBase}/pdf/${paper.hash}`
+      : webview.asWebviewUri(vscode.Uri.parse(paper.storedPdfUri)).toString();
     const script = webview.asWebviewUri(
       vscode.Uri.joinPath(this.context.extensionUri, 'media', 'pdfViewer.js')
     );
@@ -234,7 +281,7 @@ export class PdfViewer implements vscode.Disposable {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${scriptNonce}' ${webview.cspSource}; worker-src blob: ${webview.cspSource}; connect-src ${webview.cspSource};" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data: ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${scriptNonce}' ${webview.cspSource} http://127.0.0.1:*; worker-src blob: ${webview.cspSource} http://127.0.0.1:*; connect-src ${webview.cspSource} http://127.0.0.1:*;" />
     <link rel="stylesheet" href="${style}?v=${scriptNonce}" />
     <title>${escapeHtml(paper.title)}</title>
   </head>
@@ -255,11 +302,11 @@ export class PdfViewer implements vscode.Disposable {
       window.codeChasingPaper = ${JSON.stringify({
         hash: paper.hash,
         preview: this.preparedPreviews.get(paper.hash),
-        pdfUrl: webview.asWebviewUri(vscode.Uri.parse(paper.storedPdfUri)).toString(),
-        pdfModule: pdfModule.toString(),
-        workerModule: workerModule.toString(),
-        viewerModule: viewerModule.toString(),
-        wasmUrl: `${wasmUrl.toString()}/`
+        pdfUrl,
+        pdfModule,
+        workerModule,
+        viewerModule,
+        wasmUrl
       })};
     </script>
     <script nonce="${scriptNonce}" type="module" src="${script}?v=${scriptNonce}"></script>
