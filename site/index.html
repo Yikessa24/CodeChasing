@@ -34,6 +34,7 @@
       <nav id="site-nav" class="site-nav" aria-label="页面导航">
         <a href="#why">痛点与方案</a>
         <a href="#features">核心功能</a>
+        <a href="#experience">体验细节</a>
         <a href="#how">工作原理</a>
         <a href="#engineering">技术与工程</a>
         <a href="#get">获取作品</a>
@@ -55,7 +56,7 @@
             <a class="btn btn-ghost" href="#how">了解工作原理</a>
           </div>
           <dl class="stats">
-            <div><dt>发布版本</dt><dd>48</dd></div>
+            <div><dt>迭代版本</dt><dd>58</dd></div>
             <div><dt>核心能力</dt><dd>6 项</dd></div>
             <div><dt>源码规模</dt><dd>1 万+ 行</dd></div>
             <div><dt>模型协议</dt><dd>3 种</dd></div>
@@ -141,7 +142,32 @@
       </div>
     </section>
 
-    <section id="how" class="section" aria-labelledby="how-title">
+    <section id="experience" class="section" aria-labelledby="experience-title">
+      <div class="container">
+        <h2 id="experience-title" class="reveal">阅读体验细节</h2>
+        <p class="section-lead reveal">证据之外，把"读"本身做顺：打开快、位置稳、画面不挤、对话不丢。</p>
+        <div class="feature-grid">
+          <article class="card reveal">
+            <h3>秒开且不怕卡的 PDF</h3>
+            <p>pdf.js 模块与 PDF 字节经仅绑定本机回环、带会话令牌路径的 HTTP 服务并行传输，可被浏览器缓存；worker 脚本与 PDF 在主线程并行取回后以同域 blob 启动，worker 内不再发网络请求；文本层重渲染串行化，首屏期间改变窗口大小也不会取消加载。各阶段耗时写入输出通道，可查可证。</p>
+          </article>
+          <article class="card reveal">
+            <h3>缩放保持阅读位置</h3>
+            <p>放大、缩小、恢复适应宽度都记住视口中心落在哪一页的哪个位置，重排后还原，不会跳回第一页；任何缩放下都能选中复制，划选一段即出现"询问这段"。</p>
+          </article>
+          <article class="card reveal">
+            <h3>四画面，不增殖</h3>
+            <p>点 <code>[C…]</code> 永远复用第一个编辑器组的代码标签，同文件散落在其它组的重复标签自动清理；点 <code>[P…]</code> 只在 PDF 所在组内高亮。窗口始终保持文件树｜代码｜PDF｜助手四个画面，连点引用也不会越开越挤。</p>
+          </article>
+          <article class="card reveal">
+            <h3>对话记忆与模型选择</h3>
+            <p>启动自动恢复最近一条对话，历史面板可切换任一保存会话且引用仍可点击；长对话按窗口保留＋增量摘要压缩。分区模型选择器打开即检测可用性，手动输入模型名先验证权限与真实输出再切换，六档推理强度点选即换。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how" class="section section-alt" aria-labelledby="how-title">
       <div class="container">
         <h2 id="how-title" class="reveal">工作原理：一条证据流水线</h2>
         <p class="section-lead reveal">从 PDF 像素到可点击引用，每一步都在本地留下可验证的痕迹。</p>
@@ -158,7 +184,7 @@
         <div class="how-grid">
           <article class="card reveal">
             <h3>1 · 本地证据准备</h3>
-            <p>导入 PDF 后在后台提取文本与高亮坐标，无需打开阅读器；语言服务器扫描工作区符号，静态分析构建带置信度分级的调用图。扫描页在此阶段完成 OCR。</p>
+            <p>导入 PDF 后在后台提取文本与高亮坐标，无需打开阅读器；语言服务器扫描工作区符号，静态分析构建带置信度分级、只含项目内定义函数的调用图。扫描页在此阶段完成 OCR。</p>
           </article>
           <article class="card reveal">
             <h3>2 · 有界探索回答</h3>
@@ -185,10 +211,10 @@
       </div>
     </section>
 
-    <section id="engineering" class="section section-alt" aria-labelledby="engineering-title">
+    <section id="engineering" class="section" aria-labelledby="engineering-title">
       <div class="container">
         <h2 id="engineering-title" class="reveal">技术与工程</h2>
-        <p class="section-lead reveal">一个人、48 个版本——靠的是严格的发布门禁，而不是运气。</p>
+        <p class="section-lead reveal">一个人、58 次版本迭代——靠的是严格的发布门禁，而不是运气。</p>
         <div class="eng-grid">
           <article class="card reveal">
             <h3>技术栈</h3>
@@ -213,7 +239,7 @@
           </article>
           <article class="card reveal">
             <h3>质量门禁</h3>
-            <p>每次发布执行 <code>npm run check</code>：类型检查 + Webview 语法检查 + 回归测试 + 构建。回归场景覆盖流式中断、取消、断网、UTF-8 分片、重复提交与引用恢复；冒烟测试解析真实的多页论文。</p>
+            <p>每次发布执行 <code>npm run check</code>：类型检查 + Webview 语法检查 + 回归测试 + 构建。回归场景覆盖流式中断、取消、断网、UTF-8 分片、重复提交、引用恢复、回环资源服务与缩放位置；冒烟测试解析真实的多页论文。</p>
           </article>
         </div>
       </div>
@@ -230,7 +256,7 @@
               <li>VS Code 1.101+</li>
               <li>Node.js 22.13+（仅源码构建）</li>
             </ul>
-            <p>推荐：从 Releases 下载安装包，扩展面板「从 VSIX 安装」即可，无需 Node.js。</p>
+            <p>推荐：下载 <code>CodeChasing-0.30.3.vsix</code>（Release v0.30.3），扩展面板「从 VSIX 安装」即可，无需 Node.js。</p>
             <h3>从源码运行</h3>
             <pre class="arch"><code>git clone https://github.com/Yikessa24/CodeChasing.git
 cd CodeChasing
@@ -241,13 +267,14 @@ npm run check   # 类型检查 + 测试 + 构建</code></pre>
           <article class="card reveal">
             <h3>上手四步</h3>
             <ol class="steps">
-              <li>齿轮图标配置模型提供商、Base URL、模型与 API key，并用连接测试验证。</li>
+              <li>⚙ 配置协议、Base URL 与 API key；▣ 选择模型与推理强度（打开即检测可用性）；✓ 测试连接。</li>
               <li>把 PDF 拖进对话（或点 + 上传），后台完成本地准备。</li>
               <li>搜索图标扫描工作区符号；选中代码按 <code>Cmd/Ctrl+Alt+P</code> 提问或追踪。</li>
               <li>点「从论文到代码」开始 guided walkthrough；点击 <code>[P…]</code> / <code>[C…]</code> 引用跳回证据。</li>
             </ol>
             <div class="cta-row">
-              <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">GitHub 仓库</a>
+              <a class="btn btn-primary" href="https://github.com/Yikessa24/CodeChasing/releases/tag/v0.30.3" target="_blank" rel="noopener">下载安装包 v0.30.3</a>
+              <a class="btn btn-ghost" href="https://github.com/Yikessa24/CodeChasing" target="_blank" rel="noopener">GitHub 仓库</a>
               <a class="btn btn-ghost" href="https://github.com/Yikessa24/CodeChasing/blob/main/docs/judge-guide.md" target="_blank" rel="noopener">评委体验手册</a>
             </div>
           </article>
