@@ -1,6 +1,6 @@
 # CodeChasing 评委体验手册
 
-适用版本：**0.27.0** · 预计完整体验时间：**15–30 分钟**
+适用版本：**0.30.1** · 预计完整体验时间：**15–30 分钟**
 
 CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的实现代码放在一起理解**：回答中的每一处论文引用 `[P…]` 和代码引用 `[C…]` 都是真实、可点击、可跳转高亮的锚点，而不是模型编造的页码或行号。
 
@@ -29,10 +29,10 @@ CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的
 ## 2. 安装插件
 
 1. 打开 GitHub Releases 页面：`https://github.com/Yikessa24/CodeChasing/releases`
-2. 下载最新版本的 `CodeChasing-0.27.0.vsix`。
+2. 下载最新 release（v0.30.1）附件中的安装包 `CodeChasing-0.30.1.vsix`。
 3. 安装（两种方式任选）：
    - 图形界面：VS Code → 扩展面板（`Cmd/Ctrl+Shift+X`）→ 右上角 `⋯` → **从 VSIX 安装…** → 选择下载的文件；
-   - 命令行：`code --install-extension CodeChasing-0.27.0.vsix`
+   - 命令行：`code --install-extension CodeChasing-0.30.1.vsix`
 4. 安装后，左侧活动栏出现 **CodeChasing 图标**（无需重启；若未出现，重新加载窗口：`Cmd/Ctrl+Shift+P` → `Reload Window`）。
 
 ## 3. 打开助手与布局
@@ -45,12 +45,16 @@ CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的
 
 ## 4. 配置模型
 
-1. 点击输入框下方的 **⚙（Configure model）**，填写：
-   - **协议**：`openai-compatible` / `anthropic` / `gemini`；
-   - **Base URL**、**模型名**、**API key**。
-2. 点击 **✓（Test model connection）** 测试连通性，会显示请求延迟。
-3. 用 **◉ Auto** 按钮随时切换推理强度：`Auto / Minimal / Low / Medium / High / XHigh`。
-   - `Auto` 使用服务商默认值，兼容性最好；显式档位需要模型支持，不支持时服务商会报错，切回 Auto 即可。
+1. 点击输入框下方的 **⚙（Configure model）**，依次填写：
+   - **协议**：`OpenAI-compatible` / `Anthropic` / `Gemini`；
+   - **Base URL**：每种协议给出默认值，可改成自己的网关或本地端点；
+   - **API key**：保存在 VS Code SecretStorage，按"提供商 + 端点"隔离；本地端点可留空。
+2. 点击输入框下方的 **▣ 模型 · 强度** 按钮，打开分区选择器（打开时会先用当前 key 检测模型可用性，并显示进度通知）：
+   - **模型分区**：只列出检测通过的模型（当前模型、提供商返回的模型列表、含 Gemini 的跨家族建议列表，建议列表可用 `codeChasing.modelChoices` 配置）；无权限/不存在/无输出的模型自动隐藏，顶部说明各类数量；
+   - **✎ 手动输入模型名…**：输入后先检测权限与真实输出，检测通过才切换，否则给出原因并保持原模型；
+   - **推理强度分区**：`Auto / Minimal / Low / Medium / High / Extra high`，点选即切换；
+   - 选完后按钮文字同步为 `模型 · 强度`。`Auto` 使用服务商默认值，兼容性最好；显式档位需要模型支持，不支持时服务商会报错，切回 Auto 即可。
+3. 点击 **✓（Test model connection）** 测试连通性，会显示请求延迟。
 
 常见配置示例：
 
@@ -147,7 +151,7 @@ CodeChasing 是一个 VS Code 扩展，用于把**研究论文（PDF）和它的
 按顺序做完以下 10 步，即可覆盖全部核心能力：
 
 1. 安装 vsix，打开代码仓库文件夹，把助手移到右侧（第 2–3 节）。
-2. ⚙ 配置模型 → ✓ 测试连接（第 4 节）。
+2. ⚙ 配置协议与 key → ▣ 选择模型与强度 → ✓ 测试连接（第 4 节）。
 3. 拖入论文 PDF，等待准备完成（第 5 节）。
 4. 问："这篇论文的核心贡献是什么？"——观察 Thinking 与多轮检索（第 6 节）。
 5. 点击回答中的 `[P1]`——观察 PDF 自动打开并高亮原文（第 6 节）。
