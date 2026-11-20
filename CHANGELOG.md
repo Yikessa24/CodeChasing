@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.30.6
+
+- Problem-led first screen: the empty state now states the core purpose ("论文 ↔ 代码，互相作证") with the two pain-point questions, a primary "▶ 从论文到代码，一键精读" button, and a clickable three-step path (import paper → scan code → ask); ordinary chat is demoted to a secondary hint.
+- The empty state reacts to preparation status: the paper / code steps turn into ✓ once ready, a one-click sample question ("这篇论文的核心方法对应仓库哪些代码？") appears when the paper is ready, and the primary button is highlighted with a ready note once both paper and code are prepared.
+- Toolbar hierarchy: the three core actions (▶ 精读, ↔ 对应, ◇ 样例) carry text labels and an accent outline, separated by dividers from the utility icons, so the paper↔code loop is no longer visually equal to settings or window moves.
+
+## 0.30.5
+
+- Guided mapping review: selecting a paper↔code mapping now immediately opens the code range and the highlighted paper evidence side by side, then offers confirm / reject / delete with plain-language effects and a confirmation toast; the empty state explains how mappings are learned and offers to jump to the composer.
+- Interaction feedback pass: starting a new conversation and resetting the running example ask for confirmation; the stop button stays visible but disabled with a reason when the current stage cannot be cancelled; the send button explains why it is disabled; PDF open failures and per-page render / text-layer failures show a click-to-retry note instead of silence; fit-to-width is disabled until the first page exists.
+- Chinese-first UI: command palette titles, toolbar tooltips, attachment / index / model statuses, quick picks, settings descriptions and the PDF viewer chrome are localized; the empty state lists the concrete toolbar actions.
+
+## 0.30.4
+
+- Call graph now opens on a model-judged core subgraph: the utility model picks the entry points and main control/data-flow functions (at most 40, test/script/vendor symbols pre-filtered) from the whole-project call graph, and only edges between selected functions are drawn; the result is cached per project graph and a "重新判断核心" button re-runs the judgment, with a heuristic entry-point slice as fallback when no provider is usable. A "显示全部/显示核心" toggle switches between the core subgraph and the full graph.
+- Keep the viewport center when zooming the call graph: zoom/fit remember the content point at the viewport center (including the centering offset when the graph fits the pane) and restore it after rescaling; a graph smaller than the pane is centered instead of sticking to the top-left corner.
+
 ## 0.30.3
 
 - Keep the window at four panes (file tree, code, paper, assistant): code citation jumps always reuse the first editor group and close stray non-dirty tabs of the same file in other groups, instead of opening a new group beside whichever group happened to be active; the paper viewer is created in the second group and citation highlights reveal it in place instead of moving it beside the active group; the call graph panel likewise reveals in its own group.

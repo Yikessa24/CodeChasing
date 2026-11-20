@@ -3,6 +3,14 @@ import * as vscode from 'vscode';
 import { parseExplorationPlan, type ExplorationAction } from './agenticExploration.js';
 import { AssistantViewProvider, type AssistantHandlers } from './assistantView.js';
 import { CallGraphView } from './callGraphView.js';
+import { sliceCallGraph } from './callGraphAnalysis.js';
+import {
+  buildCoreSelectionPrompt,
+  coreCandidateSymbols,
+  coreGraphHash,
+  coreSubgraph,
+  parseCoreSelection
+} from './callGraphCore.js';
 import { abortable, throwIfAborted } from './cancellation.js';
 import {
   parseCitationAuditResponse,
@@ -49,6 +57,7 @@ import { SelectionCodeLensProvider } from './selectionCodeLens.js';
 import { expandStructuralEvidence, retrieveEvidence } from './retrieval.js';
 import type {
   AssistantAnswer,
+  CallGraph,
   ChatMessage,
   CodeContext,
   CodeSelectionReference,
@@ -143,8 +152,9 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       (selection) => this.attachPaperSelection(selection),
       (status) => this.handlePaperViewerStatus(status)
     );
-    this.callGraphView = new CallGraphView((node) =>
-      this.openCode(node.filePath, node.startLine, node.endLine)
+    this.callGraphView = new CallGraphView(
+      (node) => this.openCode(node.filePath, node.startLine, node.endLine),
+      () => this.openCallGraph(true)
     );
     this.assistantView = new AssistantViewProvider(context, this);
 
@@ -184,11 +194,11 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     if (!this.context.globalState.get<boolean>(RIGHT_SIDEBAR_PROMPT_KEY, false)) {
       await this.context.globalState.update(RIGHT_SIDEBAR_PROMPT_KEY, true);
       const choice = await vscode.window.showInformationMessage(
-        'Move CodeChasing to the right Secondary Side Bar so the Explorer remains visible?',
-        'Move to right',
-        'Keep on left'
+        '把 CodeChasing 移到右侧副侧边栏，让左侧文件树保持可见？',
+        '移到右侧',
+        '留在左侧'
       );
-      if (choice === 'Move to right') {
+      if (choice === '移到右侧') {
         await this.moveToRight();
       }
     }
@@ -205,7 +215,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   public async importPaper(): Promise<void> {
     if (this.activeRequest) {
       void vscode.window.showInformationMessage(
-        'Stop the current response before changing the attached PDF.'
+        '请先停止当前回答，再更换附带的 PDF。'
       );
       return;
     }
@@ -213,8 +223,8 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       canSelectFiles: true,
       canSelectFolders: false,
       canSelectMany: false,
-      filters: { 'Research papers': ['pdf'] },
-      openLabel: 'Import paper'
+      filters: { '论文 PDF': ['pdf'] },
+      openLabel: '导入论文'
     });
     const source = selected?.[0];
     if (!source) {
@@ -289,10 +299,10 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const record = await this.paperStore.getCurrent();
     if (!record) {
       const action = await vscode.window.showInformationMessage(
-        'No paper is attached to this workspace.',
-        'Import PDF'
+        '当前对话还没有附带论文。',
+        '导入 PDF'
       );
-      if (action === 'Import PDF') {
+      if (action === '导入 PDF') {
         await this.importPaper();
       }
       return;
@@ -302,7 +312,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       (record.metadata.hash === this.pendingPaperAttachmentHash && !this.paperBackgroundReady)
     ) {
       void vscode.window.showInformationMessage(
-        'This PDF is still being prepared in the background. Open it when the attachment card shows Ready.'
+        '这篇 PDF 仍在后台准备中。等附件卡片显示"就绪"后再打开阅读器。'
       );
       return;
     }
@@ -329,7 +339,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   private async importPdfBytes(fileName: string, bytes: Buffer): Promise<void> {
     if (this.activeRequest) {
       void vscode.window.showInformationMessage(
-        'Stop the current response before changing the attached PDF.'
+        '请先停止当前回答，再更换附带的 PDF。'
       );
       return;
     }
@@ -656,7 +666,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
         controller.signal.aborted ? 'cancelled' : 'ready'
       );
       if (!controller.signal.aborted) {
-        void vscode.window.showInformationMessage(`CodeChasing scanned ${count} code symbols.`);
+        void vscode.window.showInformationMessage(`CodeChasing 已扫描 ${count} 个代码符号。`);
       }
     } finally {
       if (this.activeCodeIndex === controller) {
@@ -665,20 +675,53 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     }
   }
 
-  public async openCallGraph(): Promise<void> {
+  public async openCallGraph(forceRefresh = false): Promise<void> {
     if (this.repositoryIndex.symbolCount === 0 || this.repositoryIndex.currentStatus === 'stale') {
       await this.indexWorkspace();
     }
     const selected = await this.repositoryIndex.getActiveEditorContext();
-    const graph = await this.repositoryIndex.getCallGraph(
-      selected,
-      selected ? Math.min(Math.max(this.repositoryIndex.symbolCount, 220), 600) : Math.max(1, this.repositoryIndex.symbolCount)
-    );
-    if (!graph.nodes.length) {
-      void vscode.window.showInformationMessage('No callable code symbols were found in this workspace.');
+    const { graph: full, seedId } = await this.repositoryIndex.getFullCallGraph(selected);
+    if (!full.nodes.length) {
+      void vscode.window.showInformationMessage(
+        '当前工作区没有扫描到可调用函数。请打开包含函数 / 类定义的代码文件夹后重试。'
+      );
       return;
     }
-    this.callGraphView.show(graph);
+    const core = await this.coreCallGraph(full, seedId, forceRefresh);
+    this.callGraphView.show(core, full);
+  }
+
+  private async coreCallGraph(
+    full: CallGraph,
+    seedId: string | undefined,
+    forceRefresh: boolean
+  ): Promise<CallGraph> {
+    const hash = coreGraphHash(full);
+    const cacheKey = 'codeChasing.callGraphCore.v1';
+    const cached = this.context.workspaceState.get<{ hash: string; ids: string[] }>(cacheKey);
+    if (!forceRefresh && cached?.hash === hash) {
+      const cachedGraph = coreSubgraph(full, cached.ids);
+      if (cachedGraph.nodes.length >= 3) return { ...cachedGraph, coreSelection: 'model' };
+    }
+    const status = vscode.window.setStatusBarMessage('CodeChasing: 模型判断核心函数…');
+    try {
+      const configuration = await this.providerConfigurationWithSecret();
+      this.assertProviderIsUsable(configuration);
+      const provider = createChatProvider({ ...configuration, reasoningEffort: 'auto' });
+      const response = await provider.complete(
+        buildCoreSelectionPrompt(full, coreCandidateSymbols(full), 40)
+      );
+      const ids = parseCoreSelection(response, full, 40);
+      if (ids) {
+        await this.context.workspaceState.update(cacheKey, { hash, ids });
+        return { ...coreSubgraph(full, ids), coreSelection: 'model' };
+      }
+    } catch {
+      // model unavailable or unparsable: heuristic core below
+    } finally {
+      status.dispose();
+    }
+    return { ...sliceCallGraph(full, seedId, 80), coreSelection: 'heuristic' };
   }
 
   public async configureProvider(): Promise<void> {
@@ -687,21 +730,21 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       [
         {
           label: 'OpenAI-compatible',
-          description: 'OpenAI, DeepSeek, Qwen, Ollama, LM Studio and compatible gateways',
+          description: 'OpenAI、DeepSeek、Qwen、Ollama、LM Studio 及兼容网关',
           value: 'openai-compatible' as const
         },
         {
           label: 'Anthropic',
-          description: 'Native Anthropic Messages API',
+          description: 'Anthropic 原生 Messages API',
           value: 'anthropic' as const
         },
         {
           label: 'Gemini',
-          description: 'Native Google Gemini generateContent API',
+          description: 'Google Gemini 原生 generateContent API',
           value: 'gemini' as const
         }
       ],
-      { title: 'Choose model API protocol', placeHolder: current.provider }
+      { title: '选择模型 API 协议', placeHolder: `当前：${current.provider}` }
     );
     if (!picked) {
       return;
@@ -712,7 +755,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       gemini: 'https://generativelanguage.googleapis.com'
     };
     const baseUrl = await vscode.window.showInputBox({
-      title: 'Model API base URL',
+      title: '模型 API 地址（base URL）',
       value: picked.value === current.provider ? current.baseUrl : defaults[picked.value],
       ignoreFocusOut: true,
       validateInput: (value) => {
@@ -720,9 +763,9 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
           const url = new URL(value);
           return url.protocol === 'http:' || url.protocol === 'https:'
             ? undefined
-            : 'Only http:// and https:// endpoints are supported.';
+            : '仅支持 http:// 与 https:// 地址。';
         } catch {
-          return 'Enter a valid http(s) URL.';
+          return '请输入合法的 http(s) URL。';
         }
       }
     });
@@ -730,26 +773,26 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       return;
     }
     const model = await vscode.window.showInputBox({
-      title: 'Model name',
+      title: '模型名',
       value: current.model,
       ignoreFocusOut: true,
-      validateInput: (value) => (value.trim() ? undefined : 'Model name is required.')
+      validateInput: (value) => (value.trim() ? undefined : '模型名不能为空。')
     });
     if (!model) {
       return;
     }
     const reasoning = await vscode.window.showQuickPick(
       [
-        { label: 'Auto', description: 'Use the model/provider default', value: 'auto' as const },
-        { label: 'Minimal', description: 'Fastest supported reasoning', value: 'minimal' as const },
-        { label: 'Low', description: 'Lower latency and cost', value: 'low' as const },
-        { label: 'Medium', description: 'Balanced reasoning', value: 'medium' as const },
-        { label: 'High', description: 'Deeper reasoning', value: 'high' as const },
-        { label: 'Extra high', description: 'Only for models that support xhigh', value: 'xhigh' as const }
+        { label: 'Auto', description: '沿用模型 / 提供商默认强度', value: 'auto' as const },
+        { label: 'Minimal', description: '最快响应', value: 'minimal' as const },
+        { label: 'Low', description: '更低延迟与成本', value: 'low' as const },
+        { label: 'Medium', description: '均衡推理', value: 'medium' as const },
+        { label: 'High', description: '更深入推理', value: 'high' as const },
+        { label: 'Extra high', description: '仅支持 xhigh 的模型可用', value: 'xhigh' as const }
       ],
       {
-        title: 'Reasoning effort',
-        placeHolder: current.reasoningEffort
+        title: '推理强度',
+        placeHolder: `当前：${current.reasoningEffort}`
       }
     );
     if (!reasoning) {
@@ -766,8 +809,8 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const apiKey = await vscode.window.showInputBox({
       title: 'API key',
       prompt: existingApiKey
-        ? 'A key is stored for this provider and endpoint. Leave blank to keep it, enter DELETE to remove it, or enter a replacement.'
-        : 'Stored in VS Code SecretStorage. Leave blank only for a trusted local endpoint.',
+        ? '该提供商与地址已存有 key。留空保持不变；输入 DELETE 删除；输入新值替换。'
+        : 'key 只保存在 VS Code SecretStorage 中。仅可信本地端点才可留空。',
       password: true,
       ignoreFocusOut: true
     });
@@ -778,11 +821,11 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const isLocalEndpoint = ['localhost', '127.0.0.1', '::1'].includes(configuredUrl.hostname);
     if (configuredUrl.protocol === 'http:' && !isLocalEndpoint) {
       const insecureChoice = await vscode.window.showWarningMessage(
-        'This remote model endpoint uses unencrypted HTTP. Your API key and context could be intercepted.',
+        '该远程模型端点使用未加密 HTTP，API key 与上下文可能被窃听。',
         { modal: true },
-        'Save anyway'
+        '仍要保存'
       );
-      if (insecureChoice !== 'Save anyway') {
+      if (insecureChoice !== '仍要保存') {
         return;
       }
     }
@@ -805,7 +848,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const statusConfig = await this.providerConfigurationWithSecret();
     this.assistantView.setModelStatus(statusConfig, this.modelDisplayNames.get(statusConfig.model));
     void vscode.window.showInformationMessage(
-      `CodeChasing configured ${model.trim()} with ${reasoning.value} reasoning.`
+      `CodeChasing 已配置模型 ${model.trim()}（推理强度 ${reasoning.value}）。`
     );
   }
 
@@ -943,7 +986,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
         title: '模型名',
         value: current.model,
         ignoreFocusOut: true,
-        validateInput: (value) => (value.trim() ? undefined : 'Model name is required.')
+        validateInput: (value) => (value.trim() ? undefined : '模型名不能为空。')
       });
       const name = entered?.trim();
       if (!name) {
@@ -987,7 +1030,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: `CodeChasing: testing ${config.model}`,
+        title: `CodeChasing: 正在测试 ${config.model}`,
         cancellable: false
       },
       async () => {
@@ -999,7 +1042,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       }
     );
     void vscode.window.showInformationMessage(
-      `Model connection succeeded in ${Date.now() - startedAt} ms with ${config.reasoningEffort} reasoning.`
+      `模型连接成功，耗时 ${Date.now() - startedAt} ms（推理强度 ${config.reasoningEffort}）。`
     );
   }
 
@@ -1034,7 +1077,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       attachedPaper?.metadata.hash === this.pendingPaperAttachmentHash &&
       attachedPaper.metadata.extractionStatus !== 'ready'
     ) {
-      throw new Error('The attached PDF is still being prepared. Wait until it shows Ready or remove it.');
+      throw new Error('附带的 PDF 仍在准备中。请等附件卡片显示"就绪"后再提问，或点 × 移除它。');
     }
     if (this.pendingPaperAttachmentHash && !this.paperBackgroundReady) {
       throw new Error(
@@ -1703,7 +1746,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const paper = await this.paperStore.getCurrent();
     if (!paper || paper.metadata.hash !== selection.paperHash) {
       void vscode.window.showInformationMessage(
-        'This PDF is no longer attached to the current conversation.'
+        '这个 PDF 已不在当前对话中附带，无法划选提问。'
       );
       return;
     }
@@ -1725,8 +1768,8 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
 
   public async askFromCommand(): Promise<void> {
     const question = await vscode.window.showInputBox({
-      title: 'Ask CodeChasing',
-      prompt: 'Ask about the attached paper, selected code, or scanned repository.',
+      title: '向 CodeChasing 提问',
+      prompt: '可以问附带的论文、选中的代码，或已扫描的仓库。',
       ignoreFocusOut: true
     });
     if (question?.trim()) {
@@ -1737,7 +1780,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   public async analyzeSelection(): Promise<void> {
     const selectedCode = await this.repositoryIndex.getActiveEditorContext();
     if (!selectedCode) {
-      void vscode.window.showInformationMessage('Select a function or code range first.');
+      void vscode.window.showInformationMessage('请先在编辑器中选中一个函数或一段代码。');
       return;
     }
     const choice = await vscode.window.showQuickPick(
@@ -1792,16 +1835,16 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const paper = await this.paperStore.getCurrent();
     if (!paper || paper.metadata.extractionStatus !== 'ready') {
       void vscode.window.showInformationMessage(
-        'Import a paper and wait for PDF preparation to finish before starting a walkthrough.'
+        '请先导入论文并等 PDF 准备完成（附件卡片显示"就绪"），再开始贯穿讲解。'
       );
       return;
     }
     if (this.repositoryIndex.symbolCount === 0) {
       const choice = await vscode.window.showInformationMessage(
-        'The code workspace needs an index before the walkthrough can connect paper and implementation.',
-        'Scan code'
+        '贯穿讲解需要先把代码仓库扫描一遍，才能把论文和实现对应起来。',
+        '扫描代码'
       );
-      if (choice !== 'Scan code') {
+      if (choice !== '扫描代码') {
         return;
       }
       await this.indexWorkspace();
@@ -1816,48 +1859,85 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const paper = await this.paperStore.getCurrent();
     const mappings = this.semanticMappings.list(paper?.metadata.hash);
     if (!mappings.length) {
-      void vscode.window.showInformationMessage(
-        'No evidence-backed paper-code mappings have been learned yet. Ask a question whose answer cites both paper and code.'
+      const choice = await vscode.window.showInformationMessage(
+        '当前还没有论文↔代码对应关系。提一个同时引用论文和代码的问题（例如"这个函数对应论文哪一节？"），回答通过引用审查后会自动学习对应关系。',
+        '去提问'
       );
+      if (choice === '去提问') {
+        await this.assistantView.reveal();
+      }
       return;
     }
+    const relationNames: Record<string, string> = {
+      implements: '实现',
+      calls: '调用',
+      input: '输入',
+      output: '输出',
+      configures: '配置',
+      trains: '训练',
+      evaluates: '评估',
+      supports: '支撑'
+    };
+    const statusNames: Record<string, string> = {
+      confirmed: '已确认',
+      rejected: '已拒绝',
+      stale: '代码已变动',
+      candidate: '待审核'
+    };
     const selected = await vscode.window.showQuickPick(
       mappings.map((edge) => ({
-        label: `$(${edge.status === 'confirmed' ? 'verified-filled' : edge.status === 'rejected' ? 'circle-slash' : edge.status === 'stale' ? 'warning' : 'question'}) ${edge.relation} · ${edge.codeSymbolName ?? edge.codeFilePath}`,
-        description: `p.${edge.paperPage} ↔ ${edge.codeFilePath}:${edge.codeStartLine}-${edge.codeEndLine}`,
+        label: `$(${edge.status === 'confirmed' ? 'verified-filled' : edge.status === 'rejected' ? 'circle-slash' : edge.status === 'stale' ? 'warning' : 'question'}) ${relationNames[edge.relation] ?? edge.relation} · ${edge.codeSymbolName ?? edge.codeFilePath}`,
+        description: `${statusNames[edge.status] ?? edge.status} · 论文 p.${edge.paperPage} ↔ ${edge.codeFilePath}:${edge.codeStartLine}-${edge.codeEndLine}`,
         detail: edge.explanation,
         edge
       })),
-      { title: 'Paper ↔ code mappings', placeHolder: 'Choose a mapping to inspect or review' }
+      {
+        title: '论文 ↔ 代码对应关系',
+        placeHolder: '选中一条立即对照打开论文证据与代码位置，然后可确认 / 拒绝 / 删除'
+      }
     );
     if (!selected) return;
+    const edge = selected.edge;
+    await this.openCode(edge.codeFilePath, edge.codeStartLine, edge.codeEndLine);
+    await this.openEvidence({
+      chunkId: edge.paperChunkId,
+      paperHash: edge.paperHash,
+      page: edge.paperPage,
+      preview: edge.paperPreview,
+      boxes: edge.paperBoxes
+    });
     const action = await vscode.window.showQuickPick(
       [
-        { label: '$(verified-filled) Confirm mapping', value: 'confirm' as const },
-        { label: '$(circle-slash) Reject mapping', value: 'reject' as const },
-        { label: '$(book) Open paper evidence', value: 'paper' as const },
-        { label: '$(code) Open code range', value: 'code' as const },
-        { label: '$(trash) Delete mapping', value: 'delete' as const }
+        {
+          label: '$(verified-filled) 确认对应',
+          description: '之后的回答优先采用这条论文↔代码关系',
+          value: 'confirm' as const
+        },
+        {
+          label: '$(circle-slash) 拒绝对应',
+          description: '之后的回答不再采用这条关系',
+          value: 'reject' as const
+        },
+        {
+          label: '$(trash) 删除对应',
+          description: '从已学习的关系中移除这条记录',
+          value: 'delete' as const
+        }
       ],
-      { title: selected.label, placeHolder: selected.detail }
+      {
+        title: `${relationNames[edge.relation] ?? edge.relation} · ${edge.codeSymbolName ?? edge.codeFilePath}`,
+        placeHolder: edge.explanation
+      }
     );
     if (!action) return;
-    const edge = selected.edge;
     if (action.value === 'confirm') await this.semanticMappings.setStatus(edge.id, 'confirmed');
     if (action.value === 'reject') await this.semanticMappings.setStatus(edge.id, 'rejected');
     if (action.value === 'delete') await this.semanticMappings.remove(edge.id);
-    if (action.value === 'paper') {
-      await this.openEvidence({
-        chunkId: edge.paperChunkId,
-        paperHash: edge.paperHash,
-        page: edge.paperPage,
-        preview: edge.paperPreview,
-        boxes: edge.paperBoxes
-      });
-    }
-    if (action.value === 'code') {
-      await this.openCode(edge.codeFilePath, edge.codeStartLine, edge.codeEndLine);
-    }
+    const verb =
+      action.value === 'confirm' ? '已确认' : action.value === 'reject' ? '已拒绝' : '已删除';
+    void vscode.window.showInformationMessage(
+      `${verb}对应关系：论文 p.${edge.paperPage} ↔ ${edge.codeFilePath}:${edge.codeStartLine}-${edge.codeEndLine}`
+    );
     this.assistantView.setMappingCount(this.semanticMappings.activeCount(paper?.metadata.hash));
   }
 
@@ -1865,16 +1945,24 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
     const example = this.persistentExample;
     if (!example) {
       const choice = await vscode.window.showInformationMessage(
-        'No structured running example exists in this conversation yet.',
-        'Build with walkthrough'
+        '本次对话还没有贯穿样例。点 ▶ 按流程讲解论文与代码，回答完成后会自动提炼一个可追踪的运行样例。',
+        '开始贯穿讲解'
       );
-      if (choice === 'Build with walkthrough') await this.startWalkthrough();
+      if (choice === '开始贯穿讲解') await this.startWalkthrough();
       return;
     }
     this.assistantView.showPersistentExample(example);
   }
 
   public async resetPersistentExample(): Promise<void> {
+    const confirmed = await vscode.window.showWarningMessage(
+      '重置贯穿样例？当前样例与形状追踪会被清除，可再用 ▶ 重新生成。',
+      { modal: true },
+      '重置样例'
+    );
+    if (confirmed !== '重置样例') {
+      return;
+    }
     this.persistentExample = undefined;
     this.assistantView.setPersistentExample(undefined);
     await this.saveCurrentConversation();
@@ -1883,25 +1971,40 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   public async manageIndexes(): Promise<void> {
     if (this.activeRequest) {
       void vscode.window.showInformationMessage(
-        'Stop the current response before replacing, removing, or rebuilding its context.'
+        '请先停止当前回答，再更换、移除或重建上下文。'
       );
       return;
     }
     const paper = await this.paperStore.getCurrent();
     const choice = await vscode.window.showQuickPick(
       [
-        { label: '$(refresh) Re-scan code', value: 'reindexCode' as const },
-        { label: '$(debug-stop) Cancel code scan', value: 'cancelCode' as const },
         {
-          label: '$(refresh) Re-prepare / retry PDF',
-          description: paper?.metadata.title ?? 'No paper imported',
+          label: '$(refresh) 重新扫描代码',
+          description: '代码增删改后刷新符号与调用关系索引',
+          value: 'reindexCode' as const
+        },
+        { label: '$(debug-stop) 取消代码扫描', value: 'cancelCode' as const },
+        {
+          label: '$(refresh) 重新准备 / 重试 PDF',
+          description: paper?.metadata.title ?? '尚未导入论文',
           value: 'reindexPaper' as const
         },
-        { label: '$(debug-stop) Pause PDF preparation', value: 'cancelPaper' as const },
-        { label: '$(replace) Replace paper', value: 'replacePaper' as const },
-        { label: '$(close) Detach paper from this conversation', value: 'removePaper' as const }
+        { label: '$(debug-stop) 暂停 PDF 准备', value: 'cancelPaper' as const },
+        {
+          label: '$(replace) 更换论文',
+          description: '导入另一篇 PDF 替换当前附带论文',
+          value: 'replacePaper' as const
+        },
+        {
+          label: '$(close) 从本对话移除论文',
+          description: '缓存保留，历史引用仍可跳转',
+          value: 'removePaper' as const
+        }
       ],
-      { title: 'Manage CodeChasing indexes' }
+      {
+        title: '管理论文与代码索引',
+        placeHolder: '选择要执行的维护操作'
+      }
     );
     if (!choice) {
       return;
@@ -1915,7 +2018,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
           this.activeCodeIndex.abort();
           this.assistantView.setIndexStatus(this.repositoryIndex.symbolCount, 'cancelled');
         } else {
-          void vscode.window.showInformationMessage('A code scan is not currently running.');
+          void vscode.window.showInformationMessage('当前没有正在进行的代码扫描。');
         }
         break;
       case 'reindexPaper': {
@@ -1937,7 +2040,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
           const metadata = await this.paperStore.markExtractionPaused(paper.metadata.hash);
           this.assistantView.setPaper(metadata);
         } else {
-          void vscode.window.showInformationMessage('PDF preparation is not currently running.');
+          void vscode.window.showInformationMessage('当前没有正在进行的 PDF 准备。');
         }
         break;
       }
@@ -1949,11 +2052,11 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
           break;
         }
         const confirmed = await vscode.window.showWarningMessage(
-          `Detach ${paper.metadata.title} from this conversation? The cached PDF is retained so historical citations keep working.`,
+          `从本对话移除《${paper.metadata.title}》？缓存的 PDF 会保留，历史引用仍可跳转。`,
           { modal: true },
-          'Remove'
+          '移除'
         );
-        if (confirmed === 'Remove') {
+        if (confirmed === '移除') {
           this.paperAttachmentGeneration += 1;
           this.activePaperIndex?.abort();
           this.activePaperIndex = undefined;
@@ -1973,6 +2076,14 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
   }
 
   public async clearConversation(): Promise<void> {
+    const confirmed = await vscode.window.showWarningMessage(
+      '开始新对话？当前对话会自动存入历史对话（◷ 可找回）。',
+      { modal: true },
+      '开始新对话'
+    );
+    if (confirmed !== '开始新对话') {
+      return;
+    }
     await this.cancelRequest(true);
     this.paperAttachmentGeneration += 1;
     this.activePaperIndex?.abort();
@@ -2183,7 +2294,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       ? await this.paperStore.getByHash(citation.paperHash ?? inferredHash ?? '')
       : await this.paperStore.getCurrent();
     if (!record) {
-      void vscode.window.showWarningMessage('The paper used by this citation is no longer available.');
+      void vscode.window.showWarningMessage('这条引用对应的论文已不在缓存中，无法跳转。');
       return;
     }
     const chunk = resolvePaperCitation(record, {
@@ -2193,7 +2304,7 @@ class CodeChasingApplication implements vscode.Disposable, AssistantHandlers {
       boxes: citation.boxes
     });
     if (!chunk) {
-      void vscode.window.showWarningMessage('The paper evidence anchor is no longer available.');
+      void vscode.window.showWarningMessage('这条引用的论文原文锚点已失效，无法高亮定位。');
       return;
     }
     await this.pdfViewer.open(record.metadata);

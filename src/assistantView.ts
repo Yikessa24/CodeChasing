@@ -666,17 +666,28 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
   <body>
     <main id="messages" aria-live="polite">
       <section id="empty-state">
-        <h1>你好，想聊些什么？</h1>
-        <p>可以直接聊天，也可以导入论文或选择代码进行联合分析</p>
+        <h1>论文 ↔ 代码，互相作证</h1>
+        <p class="empty-problem">论文里的方法对应代码哪一段？这段代码又对应论文哪个公式？这里每个回答都带可点击的论文页码与代码行出处。</p>
+        <button class="primary empty-cta" data-action="startWalkthrough">▶ 从论文到代码，一键精读</button>
+        <p class="empty-steps">
+          <button class="empty-step" id="empty-step-paper" data-action="importPaper">① + 导入论文 PDF</button>
+          <span class="empty-step-arrow">→</span>
+          <button class="empty-step" id="empty-step-code" data-action="indexWorkspace">② ⌕ 扫描代码</button>
+          <span class="empty-step-arrow">→</span>
+          <span class="empty-step">③ 提问或一键精读</span>
+        </p>
+        <p class="empty-cta-note" id="empty-cta-note" hidden>论文与代码已就绪，可以开始。</p>
+        <button class="empty-sample" id="empty-sample" hidden>问：这篇论文的核心方法对应仓库哪些代码？</button>
+        <p class="empty-alt">也可以直接聊天，或在编辑器选中代码后右键提问。</p>
       </section>
     </main>
     <footer>
       <section id="context-popover" hidden>
-        <div><span class="status-label">Paper</span><span id="paper-status">Not imported</span></div>
-        <div><span class="status-label">Code</span><span id="index-status">Not scanned</span></div>
-        <div><span class="status-label">Model</span><span id="model-status">Not configured</span></div>
-        <div><span class="status-label">Mappings</span><span id="mapping-status">0 candidates</span></div>
-        <div><span class="status-label">Example</span><span id="example-status">Not established</span></div>
+        <div><span class="status-label">论文</span><span id="paper-status">未导入</span></div>
+        <div><span class="status-label">代码</span><span id="index-status">未扫描</span></div>
+        <div><span class="status-label">模型</span><span id="model-status">未配置</span></div>
+        <div><span class="status-label">对应关系</span><span id="mapping-status">0 条</span></div>
+        <div><span class="status-label">贯穿样例</span><span id="example-status">未建立</span></div>
       </section>
       <div id="paper-attachment" hidden>
         <div class="paper-file-icon" aria-hidden="true"><span>PDF</span></div>
@@ -684,46 +695,48 @@ export class AssistantViewProvider implements vscode.WebviewViewProvider {
           <strong id="paper-attachment-title"></strong>
           <span id="paper-attachment-state"></span>
         </div>
-        <div id="paper-attachment-progress" class="paper-progress" role="progressbar" aria-label="Preparing PDF"></div>
-        <button id="cancel-paper-attachment" title="Cancel and remove PDF" aria-label="Cancel and remove PDF">×</button>
+        <div id="paper-attachment-progress" class="paper-progress" role="progressbar" aria-label="正在准备 PDF"></div>
+        <button id="cancel-paper-attachment" title="取消准备并移除这篇 PDF" aria-label="取消准备并移除这篇 PDF">×</button>
       </div>
       <div id="selection-context" hidden>
-        <div><strong>Selected context</strong><span id="selection-preview"></span></div>
-        <button id="clear-selection" title="Remove selected context" aria-label="Remove selected context">×</button>
+        <div><strong>划选上下文</strong><span id="selection-preview"></span></div>
+        <button id="clear-selection" title="移除划选上下文" aria-label="移除划选上下文">×</button>
       </div>
       <div id="code-context" hidden>
-        <div><strong>Selected code</strong><span id="code-preview"></span></div>
-        <button id="clear-code" title="Remove selected code" aria-label="Remove selected code">×</button>
+        <div><strong>选中代码</strong><span id="code-preview"></span></div>
+        <button id="clear-code" title="移除选中代码" aria-label="移除选中代码">×</button>
       </div>
       <textarea id="prompt" rows="4" placeholder="例如：这个函数对应论文中的哪一步？"></textarea>
       <div class="send-row">
         <span id="busy-label"></span>
         <div class="request-actions">
-          <button id="stop" class="stop" hidden aria-label="Stop generating">■ Stop</button>
-          <button id="send" class="primary">Send</button>
+          <button id="stop" class="stop" hidden aria-label="停止生成">■ 停止</button>
+          <button id="send" class="primary">发送</button>
         </div>
       </div>
-      <div class="composer-toolbar" aria-label="CodeChasing tools">
-        <button id="context-toggle" class="icon-button" title="Context status" aria-label="Context status" aria-expanded="false">ⓘ</button>
-        <button class="icon-button" data-action="startWalkthrough" title="按流程讲解论文与代码" aria-label="按流程讲解论文与代码">▶</button>
-        <button class="icon-button" data-action="importPaper" title="Import PDF" aria-label="Import PDF">+</button>
-        <button class="icon-button" data-action="openPaper" title="Open paper" aria-label="Open paper">▤</button>
-        <button class="icon-button" data-action="indexWorkspace" title="Scan code structure" aria-label="Scan code structure">⌕</button>
-        <button class="icon-button" data-action="openCallGraph" title="Open project call graph" aria-label="Open project call graph">⑂</button>
-        <button class="icon-button" data-action="manageMappings" title="Review paper-code mappings" aria-label="Review paper-code mappings">↔</button>
-        <button class="icon-button" data-action="showPersistentExample" title="View running example and tensor trace" aria-label="View running example and tensor trace">◇</button>
-        <button class="icon-button" data-action="configureProvider" title="Configure model" aria-label="Configure model">⚙</button>
-        <button class="icon-button" data-action="testProvider" title="Test model connection" aria-label="Test model connection">✓</button>
-        <button id="model-button" class="icon-button model-button" data-action="configureModel" title="Change model and reasoning effort" aria-label="Change model and reasoning effort">▣ <span id="model-label">…</span></button>
-        <button class="icon-button" data-action="manageIndexes" title="Manage paper and code indexes" aria-label="Manage indexes">⋯</button>
-        <button class="icon-button" data-action="moveToRight" title="Move CodeChasing to the right side" aria-label="Move CodeChasing to the right side">⇥</button>
+      <div class="composer-toolbar" aria-label="CodeChasing 工具">
+        <button id="context-toggle" class="icon-button" title="上下文状态：论文 / 代码 / 模型 / 对应关系 / 样例" aria-label="上下文状态" aria-expanded="false">ⓘ</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="icon-button core-action" data-action="startWalkthrough" title="按流程讲解论文与代码" aria-label="按流程讲解论文与代码">▶ <span>精读</span></button>
+        <button class="icon-button core-action" data-action="manageMappings" title="查看与审核论文↔代码对应关系" aria-label="查看与审核论文↔代码对应关系">↔ <span>对应</span></button>
+        <button class="icon-button core-action" data-action="showPersistentExample" title="查看贯穿样例与张量形状追踪" aria-label="查看贯穿样例与张量形状追踪">◇ <span>样例</span></button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button class="icon-button" data-action="importPaper" title="导入论文 PDF" aria-label="导入论文 PDF">+</button>
+        <button class="icon-button" data-action="openPaper" title="打开论文阅读器" aria-label="打开论文阅读器">▤</button>
+        <button class="icon-button" data-action="indexWorkspace" title="扫描代码结构" aria-label="扫描代码结构">⌕</button>
+        <button class="icon-button" data-action="openCallGraph" title="打开项目调用图（模型判断核心函数）" aria-label="打开项目调用图">⑂</button>
+        <button class="icon-button" data-action="configureProvider" title="配置模型提供商与 API key" aria-label="配置模型提供商">⚙</button>
+        <button class="icon-button" data-action="testProvider" title="测试模型连接" aria-label="测试模型连接">✓</button>
+        <button id="model-button" class="icon-button model-button" data-action="configureModel" title="切换模型与推理强度" aria-label="切换模型与推理强度">▣ <span id="model-label">…</span></button>
+        <button class="icon-button" data-action="manageIndexes" title="管理论文与代码索引" aria-label="管理索引">⋯</button>
+        <button class="icon-button" data-action="moveToRight" title="把 CodeChasing 移到右侧副侧边栏" aria-label="移到右侧">⇥</button>
         <button class="icon-button" data-action="openConversationHistory" title="历史对话：选择并继续之前的对话" aria-label="历史对话">◷</button>
         <button class="icon-button" data-action="clearConversation" title="新对话（当前对话会自动存入历史）" aria-label="新对话">↻</button>
-        <span class="keyboard-hint">Enter send · Shift+Enter newline</span>
+        <span class="keyboard-hint">Enter 发送 · Shift+Enter 换行</span>
       </div>
     </footer>
     <button id="ask-selection" hidden>询问这段</button>
-    <div id="drop-overlay" aria-hidden="true"><strong>Drop PDF to import</strong></div>
+    <div id="drop-overlay" aria-hidden="true"><strong>松开导入这篇 PDF</strong></div>
     <script nonce="${scriptNonce}" src="${katexScript}"></script>
     <script nonce="${scriptNonce}" src="${script}?v=${scriptNonce}"></script>
   </body>

@@ -35,10 +35,10 @@ function installStartupPreview() {
   container.style.aspectRatio = `${config.preview.width} / ${config.preview.height}`;
   const image = document.createElement('img');
   image.src = config.preview.dataUrl;
-  image.alt = 'Prepared preview of PDF page 1';
+  image.alt = 'PDF 第 1 页预渲染预览';
   container.append(image);
   pagesRoot.append(container);
-  status.textContent = 'Prepared preview · opening reader…';
+  status.textContent = '预渲染预览 · 阅读器打开中…';
   return container;
 }
 
@@ -78,6 +78,7 @@ function applyZoom() {
   zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
   zoomOut.disabled = zoom <= MIN_ZOOM;
   zoomIn.disabled = zoom >= MAX_ZOOM;
+  fitWidthButton.disabled = !renderedPages.get(1);
 }
 
 function setZoom(nextZoom) {
@@ -135,6 +136,7 @@ function restoreScrollAnchor(anchor) {
 zoomOut.addEventListener('click', () => setZoom(zoom - ZOOM_STEP));
 zoomIn.addEventListener('click', () => setZoom(zoom + ZOOM_STEP));
 fitWidthButton.addEventListener('click', fitToWidth);
+fitWidthButton.disabled = true;
 window.addEventListener('resize', () => {
   if (fitMode) {
     fitToWidth();
@@ -486,7 +488,23 @@ async function renderPage(pdf, pageNumber, onCanvas) {
                 container.append(textLayerElement);
               }
             })
-            .catch(() => undefined)
+            .catch(() => {
+              if (!container.querySelector('.page-error')) {
+                const note = document.createElement('div');
+                note.className = 'page-error';
+                note.textContent = '文本层渲染失败 · 点击重试划选';
+                note.addEventListener('click', () => {
+                  note.remove();
+                  const rec = textLayers.get(pageNumber);
+                  if (rec) {
+                    void rec
+                      .render(rec.page.getViewport({ scale: rec.baseScale * zoom }))
+                      .catch(() => undefined);
+                  }
+                });
+                container.append(note);
+              }
+            })
         );
         return record.queue;
       }
@@ -514,6 +532,22 @@ async function prepareRemainingPages(pdf) {
   }
 }
 
+function installPageRetry(container, pdf) {
+  if (container.querySelector('.page-error')) {
+    return;
+  }
+  const note = document.createElement('div');
+  note.className = 'page-error';
+  note.textContent = '本页渲染失败 · 点击重试';
+  note.addEventListener('click', () => {
+    note.remove();
+    void renderPage(pdf, Number(container.dataset.page)).catch(() =>
+      installPageRetry(container, pdf)
+    );
+  });
+  container.append(note);
+}
+
 async function render() {
   let stageName = 'start';
   const stage = (name) => {
@@ -529,7 +563,7 @@ async function render() {
     pdfjsViewer = await import(config.viewerModule);
     const importsMs = Math.round(performance.now() - startedAt);
     stage('imports');
-    status.textContent = 'Opening PDF…';
+    status.textContent = '正在打开 PDF…';
     // Webview in-worker network stalls are opaque; fetch on the main thread and
     // run the worker from a same-origin blob so it never touches the network.
     const [workerText, pdfBuffer] = await Promise.all([
@@ -565,6 +599,7 @@ async function render() {
           if (entry.isIntersecting) {
             void renderPage(pdf, Number(entry.target.dataset.page)).catch(() => {
               entry.target.dataset.rendered = 'false';
+              installPageRetry(entry.target, pdf);
             });
           }
         }
@@ -572,14 +607,14 @@ async function render() {
       { rootMargin: '900px 0px' }
     );
 
-    status.textContent = `${pdf.numPages} pages · opening…`;
+    status.textContent = `${pdf.numPages} 页 · 打开中…`;
     await createPageShell(pdf, 1);
     fitToWidth();
     await renderPage(pdf, 1, () => startupPreview?.remove());
     const firstPageMs = Math.round(performance.now() - startedAt);
     stage('firstPage');
     startupPreview?.remove();
-    status.textContent = `${pdf.numPages} pages · ready`;
+    status.textContent = `${pdf.numPages} 页 · 就绪`;
     vscode.postMessage({ type: 'pdfReady', hash: config.hash, pages: pdf.numPages });
     vscode.postMessage({
       type: 'pdfTimings',
@@ -593,9 +628,14 @@ async function render() {
       }
     });
 
-    void prepareRemainingPages(pdf).catch(() => undefined);
+    void prepareRemainingPages(pdf).catch(() => {
+      status.textContent = `${status.textContent} · 后续页准备失败`;
+    });
   } catch (error) {
-    status.textContent = 'Failed to load PDF';
+    status.textContent = '打开失败 · 点击重试';
+    status.style.cursor = 'pointer';
+    status.title = '重新加载阅读器';
+    status.onclick = () => location.reload();
     vscode.postMessage({
       type: 'pdfError',
       hash: config.hash,

@@ -380,7 +380,17 @@ export class RepositoryIndex implements vscode.Disposable {
    * presented as a certain runtime call.
    */
   public async getCallGraph(seed?: CodeContext, maxNodes = 120): Promise<CallGraph> {
-    if (this.symbolsByFile.size === 0) return { nodes: [], edges: [] };
+    const { snapshots, seedId } = await this.collectCallSymbols(seed);
+    return sliceCallGraph(buildStaticCallGraph(snapshots), seedId, Math.max(1, maxNodes));
+  }
+
+  public async getFullCallGraph(seed?: CodeContext): Promise<{ graph: CallGraph; seedId?: string }> {
+    const { snapshots, seedId } = await this.collectCallSymbols(seed);
+    return { graph: buildStaticCallGraph(snapshots), seedId };
+  }
+
+  private async collectCallSymbols(seed?: CodeContext): Promise<{ snapshots: StaticCallSymbol[]; seedId?: string }> {
+    if (this.symbolsByFile.size === 0) return { snapshots: [] };
     const callableKinds = new Set([
       vscode.SymbolKind.Function,
       vscode.SymbolKind.Method,
@@ -433,7 +443,7 @@ export class RepositoryIndex implements vscode.Disposable {
       seedId = owner ? graphNodeId(owner) : undefined;
     }
 
-    return sliceCallGraph(buildStaticCallGraph(snapshots), seedId, Math.max(1, maxNodes));
+    return { snapshots, seedId };
   }
 
   public async getRelatedContexts(seed: CodeContext, limit = 12): Promise<CodeContext[]> {

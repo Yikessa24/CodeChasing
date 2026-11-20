@@ -4,7 +4,7 @@ CodeChasing is an early VS Code extension for understanding research code togeth
 
 **评委快速上手 / Judge walkthrough**: step-by-step Chinese guide in [docs/judge-guide.md](docs/judge-guide.md).
 
-This repository currently contains MVP 0.30.3:
+This repository currently contains MVP 0.30.6:
 
 - chat normally without attaching a paper or repository context;
 - import one PDF per VS Code workspace;
@@ -59,9 +59,10 @@ This repository currently contains MVP 0.30.3:
 - trace the walkthrough's running example into selected code, summarize concrete/symbolic tensor shapes, and open highlighted PDF evidence;
 - show a one-click CodeChasing button in the editor title whenever source code is selected;
 - show an in-editor CodeLens action beside the selected code so the action remains visible even when title-bar tools overflow.
-- learn evidence-backed paper ↔ code mappings only from locally co-cited claims, persist them per workspace, validate them against later code/PDF changes, and let the user confirm or reject candidates;
+- learn evidence-backed paper ↔ code mappings only from locally co-cited claims, persist them per workspace, validate them against later code/PDF changes, and review them by selecting a mapping to open its code range and highlighted paper evidence side by side before confirming / rejecting / deleting;
 - use exact selected paper anchors and overlapping code ranges before semantic search, so reviewed mappings work in both directions without depending on matching question wording;
-- build a searchable, zoomable static call graph with high-confidence calls, lower-confidence ambiguous references, clickable code nodes, coverage metadata, and unresolved-call counts;
+- build a searchable, zoomable static call graph that opens on a model-judged core subgraph (entry points and main control/data-flow functions, at most 40, test/script/vendor symbols pre-filtered), with a core/full toggle, a re-judge button, a heuristic fallback, high-confidence calls, lower-confidence ambiguous references, clickable code nodes, coverage metadata, and unresolved-call counts;
+- lead the first run with the problem itself: the empty state states "paper ↔ code, mutually evidence" with the two pain-point questions, a primary one-click walkthrough button, and a clickable import → scan → ask path; once paper and code are ready the steps turn into checks and a one-click sample question appears; the toolbar groups the three core actions (walkthrough, mappings, running example) with text labels apart from utility icons;
 - preserve a structured running example per conversation, incrementally merge later tensor stages without dropping older source anchors, and open each step's paper/code evidence;
 - propagate symbolic tensor shapes through common construction, reshape, permutation, reduction, stacking, broadcasting, interpolation, linear, convolution, embedding, einsum, and matrix-multiplication operations;
 - classify formulas separately from prose and retain equation labels, sections, variables, relations, left/right sides, operators, functions, and nearby definition/caption evidence.

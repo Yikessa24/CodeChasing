@@ -335,6 +335,54 @@ for (const sourcePath of ['src/model.py', 'configs/train.yaml', 'docs/architectu
   assert.equal(isSensitiveWorkspacePath(sourcePath), false, `${sourcePath} must remain readable`);
 }
 
+const coreBuild = await build({
+  entryPoints: ['src/callGraphCore.ts'],
+  bundle: true,
+  platform: 'node',
+  format: 'cjs',
+  write: false,
+  logLevel: 'silent'
+});
+const coreModule = { exports: {} };
+vm.runInNewContext(coreBuild.outputFiles[0].text, { module: coreModule, exports: coreModule.exports });
+const coreSourceGraph = graphModule.exports.buildStaticCallGraph([
+  { node: { id: 'app:main', filePath: 'app.py', symbolName: 'main', startLine: 1, endLine: 3, languageId: 'python' }, source: 'def main():\n    return run(1)' },
+  { node: { id: 'app:run', filePath: 'app.py', symbolName: 'run', startLine: 5, endLine: 7, languageId: 'python' }, source: 'def run(x):\n    return step(x)' },
+  { node: { id: 'app:step', filePath: 'app.py', symbolName: 'step', startLine: 9, endLine: 11, languageId: 'python' }, source: 'def step(x):\n    return extra(x)' },
+  { node: { id: 'app:extra', filePath: 'app.py', symbolName: 'extra', startLine: 13, endLine: 14, languageId: 'python' }, source: 'def extra(x):\n    return x' },
+  { node: { id: 't:test_run', filePath: 'tests/test_app.py', symbolName: 'test_run', startLine: 1, endLine: 2, languageId: 'python' }, source: 'def test_run():\n    return run(1)' }
+]);
+const coreCandidates = coreModule.exports.coreCandidateSymbols(coreSourceGraph);
+assert.deepEqual(coreCandidates.map((node) => node.id), ['app:main', 'app:run', 'app:step', 'app:extra'], 'test files and test_* names must not be core candidates');
+const corePrompt = coreModule.exports.buildCoreSelectionPrompt(coreSourceGraph, coreCandidates, 2);
+assert.match(corePrompt[0].content, /at most 2 IDs/);
+assert.match(corePrompt[1].content, /app:main \| main \| app\.py:1-3 \| calls: app:run/);
+assert.doesNotMatch(corePrompt[1].content, /t:test_run/);
+assert.deepEqual(
+  [...coreModule.exports.parseCoreSelection('```json\n{"core":["app:main","app:run","app:step","bogus","app:main"]}\n```', coreSourceGraph, 3)],
+  ['app:main', 'app:run', 'app:step'],
+  'fenced JSON must drop unknown and duplicate ids'
+);
+assert.deepEqual([...coreModule.exports.parseCoreSelection('["app:main","app:run","app:step","app:extra"]', coreSourceGraph, 3)], ['app:main', 'app:run', 'app:step'], 'selection must respect the limit');
+assert.equal(coreModule.exports.parseCoreSelection('{"core":["app:main","app:run"]}', coreSourceGraph, 3), undefined, 'fewer than 3 core ids must fall back');
+assert.equal(coreModule.exports.parseCoreSelection('not json', coreSourceGraph, 3), undefined);
+const coreOnly = coreModule.exports.coreSubgraph(coreSourceGraph, ['app:main', 'app:run']);
+assert.deepEqual(coreOnly.nodes.map((node) => node.id).sort(), ['app:main', 'app:run']);
+assert.equal(coreOnly.edges.length, 1, 'edges leaving the core set must be dropped');
+assert.equal(coreOnly.nodes.find((node) => node.id === 'app:main')?.root, true);
+assert.equal(coreOnly.nodes.find((node) => node.id === 'app:run')?.root, false);
+assert.equal(coreModule.exports.coreGraphHash(coreSourceGraph), coreModule.exports.coreGraphHash(coreSourceGraph));
+assert.notEqual(coreModule.exports.coreGraphHash(coreSourceGraph), coreModule.exports.coreGraphHash(coreOnly));
+const callGraphViewSource = await readFile('src/callGraphView.ts', 'utf8');
+assert.match(callGraphViewSource, /canvas\.scrollLeft=cx\*W\*zoom\+o2\.x-canvas\.clientWidth\/2/);
+assert.match(callGraphViewSource, /canvas\.scrollTop=cy\*H\*zoom\+o2\.y-canvas\.clientHeight\/2/);
+assert.match(callGraphViewSource, /\.canvas\{overflow:auto;display:flex/);
+assert.match(callGraphViewSource, /svg\{display:block;flex:none;margin:auto/);
+assert.match(callGraphViewSource, /id="scope"/);
+assert.match(callGraphViewSource, /id="refresh"/);
+assert.match(callGraphViewSource, /type:'toggleScope'/);
+assert.match(callGraphViewSource, /type:'refreshCore'/);
+
 const explorationBuild = await build({
   entryPoints: ['src/agenticExploration.ts'],
   bundle: true,
@@ -736,7 +784,7 @@ assert.match(assistantScript, /paperAttachmentPreparing/);
 assert.match(assistantScript, /classList\.toggle\('loading', visible && preparing\)/);
 assert.match(assistantScript, /case 'paperAttachmentStart'/);
 assert.match(assistantScript, /case 'paperPreviewStart'/);
-assert.match(assistantScript, /Rendering first page in background/);
+assert.match(assistantScript, /后台渲染首页中/);
 assert.match(assistantScript, /paperRasterSessions/);
 assert.match(assistantScript, /case 'paperPageImagesRequest'/);
 assert.match(assistantScript, /post\('paperPageImagesReady'/);
@@ -755,7 +803,7 @@ assert.doesNotMatch(extensionSource, /const explicitlyAsksAboutPaper/);
 assert.match(extensionSource, /const wantsResearchContext = Boolean\(paper\)/);
 assert.match(extensionSource, /recentResearchConversation\(\)/);
 assert.match(extensionSource, /repairPaperGrounding\(/);
-assert.match(extensionSource, /The attached PDF is still being prepared/);
+assert.match(extensionSource, /附带的 PDF 仍在准备中/);
 assert.match(extensionSource, /preparePaperInBackground\(record\.metadata, generation, false, controller.signal\)/);
 assert.match(extensionSource, /preparePaperPreview\(metadata, bytes\)/);
 assert.match(extensionSource, /analyzePaperPages\(/);
@@ -780,6 +828,10 @@ assert.match(repositorySource, /getCallGraph\(/);
 assert.match(extensionSource, /deriveSemanticMappings\(/);
 assert.match(extensionSource, /extractPersistentExample\(/);
 assert.match(extensionSource, /staticShapeContext\(codeContexts\)/);
+assert.match(extensionSource, /getFullCallGraph\(/);
+assert.match(extensionSource, /codeChasing\.callGraphCore\.v1/);
+assert.match(extensionSource, /coreSelection: 'heuristic'/);
+assert.match(extensionSource, /buildCoreSelectionPrompt\(/);
 assert.match(extensionSource, /private async restoreSavedConversation\(/);
 assert.match(extensionSource, /const latest = this\.savedConversations\(\)\.sort\(/);
 assert.match(extensionSource, /await this\.restoreSavedConversation\(latest, false\)/);
@@ -787,6 +839,26 @@ assert.match(extensionSource, /await this\.restoreSavedConversation\(selected\.c
 const assistantViewSource = await readFile('src/assistantView.ts', 'utf8');
 assert.match(assistantViewSource, /title="历史对话：选择并继续之前的对话"/);
 assert.match(assistantViewSource, /title="新对话（当前对话会自动存入历史）"/);
+const emptyStateSection = assistantViewSource.match(/<section id="empty-state">([\s\S]*?)<\/section>/);
+assert.ok(emptyStateSection, 'assistant view should render the problem-led empty state');
+const emptyStateTemplate = assistantScript.match(/const EMPTY_STATE_HTML = `([\s\S]*?)`;/);
+assert.ok(emptyStateTemplate, 'assistant script should rebuild the same empty state');
+const normalizeHtml = (value) => value.replace(/\s+/g, ' ').trim();
+assert.equal(normalizeHtml(emptyStateSection[1]), normalizeHtml(emptyStateTemplate[1]));
+assert.match(assistantViewSource, /class="icon-button core-action" data-action="startWalkthrough"/);
+assert.match(assistantViewSource, /class="icon-button core-action" data-action="manageMappings"/);
+assert.match(assistantViewSource, /class="icon-button core-action" data-action="showPersistentExample"/);
+assert.equal((assistantViewSource.match(/toolbar-divider/g) || []).length, 2);
+assert.match(assistantScript, /function refreshEmptyState\(\)/);
+assert.match(assistantScript, /function askSampleQuestion\(\)/);
+assert.match(
+  assistantScript,
+  /emptyPaperReady = Boolean\(message\.paper && message\.paper\.extractionStatus === 'ready'\)/
+);
+assert.match(
+  assistantScript,
+  /emptyCodeReady = \(message\.status === 'ready' \|\| message\.status === 'stale'\) && message\.symbolCount > 0/
+);
 const pdfViewerScript = await readFile('media/pdfViewer.js', 'utf8');
 const pdfViewerStyle = await readFile('media/pdfViewer.css', 'utf8');
 assert.match(pdfViewerScript, /new pdfjsViewer\.TextLayerBuilder/);

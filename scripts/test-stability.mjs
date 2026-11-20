@@ -150,7 +150,7 @@ assert.ok(parseCitationAuditResponse('{"validPaperIds":[],"validCodeIds":[]}', [
   app.pendingCodeContext = selection;
   app.pendingPaperAttachmentHash = 'paper';
   app.paperStore.getCurrent = async () => ({ metadata: { hash: 'paper', extractionStatus: 'pending' } });
-  await assert.rejects(app.ask('hello'), /still being prepared/);
+  await assert.rejects(app.ask('hello'), /仍在准备中/);
   assert.equal(app.pendingCodeContext, selection);
   assert.equal(events.filter((event) => event.name === 'clearAttachedCode').length, 0);
 }

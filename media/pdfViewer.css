@@ -123,6 +123,21 @@ header strong {
   background: white;
 }
 
+.page-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background, #252526);
+  color: var(--vscode-editorWarning-foreground, #cca700);
+  border: 1px solid var(--vscode-panel-border, #454545);
+  font-size: 12px;
+  cursor: pointer;
+}
+
 .startup-preview {
   position: relative;
   flex: 0 0 auto;

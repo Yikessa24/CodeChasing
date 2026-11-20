@@ -41,6 +41,25 @@ let pendingSelectedText = '';
 let pendingSelectedCitations = [];
 const answerByArticle = new WeakMap();
 
+const EMPTY_SAMPLE_QUESTION = '这篇论文的核心方法对应仓库哪些代码？';
+const EMPTY_STATE_HTML = `
+  <h1>论文 ↔ 代码，互相作证</h1>
+  <p class="empty-problem">论文里的方法对应代码哪一段？这段代码又对应论文哪个公式？这里每个回答都带可点击的论文页码与代码行出处。</p>
+  <button class="primary empty-cta" data-action="startWalkthrough">▶ 从论文到代码，一键精读</button>
+  <p class="empty-steps">
+    <button class="empty-step" id="empty-step-paper" data-action="importPaper">① + 导入论文 PDF</button>
+    <span class="empty-step-arrow">→</span>
+    <button class="empty-step" id="empty-step-code" data-action="indexWorkspace">② ⌕ 扫描代码</button>
+    <span class="empty-step-arrow">→</span>
+    <span class="empty-step">③ 提问或一键精读</span>
+  </p>
+  <p class="empty-cta-note" id="empty-cta-note" hidden>论文与代码已就绪，可以开始。</p>
+  <button class="empty-sample" id="empty-sample" hidden>问：这篇论文的核心方法对应仓库哪些代码？</button>
+  <p class="empty-alt">也可以直接聊天，或在编辑器选中代码后右键提问。</p>
+`;
+let emptyPaperReady = false;
+let emptyCodeReady = false;
+
 function post(type, extra = {}) {
   vscode.postMessage({ type, ...extra });
 }
@@ -65,6 +84,7 @@ function renderStreamingText() {
 for (const button of document.querySelectorAll('[data-action]')) {
   button.addEventListener('click', () => post(button.dataset.action));
 }
+document.getElementById('empty-sample')?.addEventListener('click', askSampleQuestion);
 
 function setContextPopover(open) {
   contextPopover.hidden = !open;
@@ -86,13 +106,17 @@ function updateContextSummary() {
   const paper = document.getElementById('paper-status').textContent;
   const code = document.getElementById('index-status').textContent;
   const model = document.getElementById('model-status').textContent;
-  contextToggle.title = `Paper: ${paper}\nCode: ${code}\nModel: ${model}`;
+  contextToggle.title = `论文：${paper}\n代码：${code}\n模型：${model}`;
 }
 
 function updateSendAvailability() {
   send.disabled = isBusy || Boolean(pendingSubmission) || paperAttachmentPreparing;
   prompt.disabled = isBusy || Boolean(pendingSubmission);
-  send.title = paperAttachmentPreparing ? 'Wait for the PDF to finish preparing' : '';
+  send.title = paperAttachmentPreparing
+    ? '论文仍在准备中，完成后即可发送'
+    : isBusy || pendingSubmission
+      ? '回答进行中，可点 ■ 停止'
+      : '';
 }
 
 function setPaperAttachmentCard({
@@ -526,14 +550,14 @@ function decorateInlineCitations(content, answer) {
         button.dataset.citationId = citationId;
         button.textContent = `[${citationId}]`;
         if (paperCitation) {
-          button.title = `Open paper page ${paperCitation.page}: ${paperCitation.preview}`;
-          button.setAttribute('aria-label', `Open paper evidence ${citationId}, page ${paperCitation.page}`);
+          button.title = `打开论文第 ${paperCitation.page} 页并高亮：${paperCitation.preview}`;
+          button.setAttribute('aria-label', `打开论文证据 ${citationId}，第 ${paperCitation.page} 页`);
           button.addEventListener('click', () =>
             post('openEvidence', { citation: paperCitation })
           );
         } else {
-          button.title = `${codeCitation.filePath}:${codeCitation.startLine}-${codeCitation.endLine}`;
-          button.setAttribute('aria-label', `Open code evidence ${citationId}`);
+          button.title = `打开代码位置 ${codeCitation.filePath}:${codeCitation.startLine}-${codeCitation.endLine}`;
+          button.setAttribute('aria-label', `打开代码证据 ${citationId}`);
           button.addEventListener('click', () => post('openCode', codeCitation));
         }
         fragment.append(button);
@@ -566,7 +590,7 @@ function messageElement(
   }
   const roleElement = document.createElement('div');
   roleElement.className = 'role';
-  roleElement.textContent = role === 'user' ? 'You' : role === 'error' ? 'Error' : 'CodeChasing';
+  roleElement.textContent = role === 'user' ? '我' : role === 'error' ? '出错' : 'CodeChasing';
   const content = document.createElement('div');
   content.className = 'content';
   if (markdown) {
@@ -587,7 +611,7 @@ function messageElement(
     const title = document.createElement('strong');
     title.textContent = attachedPaper.title;
     const detail = document.createElement('small');
-    detail.textContent = attachedPaper.pageCount ? `PDF · ${attachedPaper.pageCount} pages` : 'PDF';
+    detail.textContent = attachedPaper.pageCount ? `PDF · ${attachedPaper.pageCount} 页` : 'PDF';
     copy.append(title, detail);
     fileCard.append(icon, copy);
     article.insertBefore(fileCard, content);
@@ -630,7 +654,7 @@ function appendSources(article, answer) {
       const button = document.createElement('button');
       button.className = 'source-chip code-chip';
       button.textContent = `[${location.codeId}] ${location.symbolName || location.filePath}`;
-      button.title = `${location.filePath}:${location.startLine}-${location.endLine}`;
+      button.title = `打开代码位置 ${location.filePath}:${location.startLine}-${location.endLine}`;
       button.addEventListener('click', () => post('openCode', location));
       locations.append(button);
     }
@@ -658,7 +682,7 @@ function showThinking(label) {
     thinkingElement.append(role, row);
     messages.append(thinkingElement);
   }
-  thinkingElement.querySelector('.thinking-label').textContent = 'Thinking';
+  thinkingElement.querySelector('.thinking-label').textContent = '思考中';
   if (follow) messages.scrollTop = messages.scrollHeight;
 }
 
@@ -681,12 +705,33 @@ function resetMessages() {
 function showEmptyState() {
   const emptyState = document.createElement('section');
   emptyState.id = 'empty-state';
-  const heading = document.createElement('h1');
-  heading.textContent = '你好，想聊些什么？';
-  const description = document.createElement('p');
-  description.textContent = '可以直接聊天，也可以导入论文或选择代码进行联合分析';
-  emptyState.append(heading, description);
+  emptyState.innerHTML = EMPTY_STATE_HTML;
+  for (const button of emptyState.querySelectorAll('[data-action]')) {
+    button.addEventListener('click', () => post(button.dataset.action));
+  }
+  emptyState.querySelector('#empty-sample').addEventListener('click', askSampleQuestion);
   messages.append(emptyState);
+  refreshEmptyState();
+}
+
+function askSampleQuestion() {
+  prompt.value = EMPTY_SAMPLE_QUESTION;
+  submit();
+}
+
+function refreshEmptyState() {
+  const root = document.getElementById('empty-state');
+  if (!root) return;
+  const paperStep = root.querySelector('#empty-step-paper');
+  const codeStep = root.querySelector('#empty-step-code');
+  paperStep.textContent = emptyPaperReady ? '✓ 论文已就绪' : '① + 导入论文 PDF';
+  paperStep.classList.toggle('done', emptyPaperReady);
+  codeStep.textContent = emptyCodeReady ? '✓ 代码已扫描' : '② ⌕ 扫描代码';
+  codeStep.classList.toggle('done', emptyCodeReady);
+  root.querySelector('#empty-sample').hidden = !emptyPaperReady;
+  const bothReady = emptyPaperReady && emptyCodeReady;
+  root.querySelector('#empty-cta-note').hidden = !bothReady;
+  root.querySelector('.empty-cta').classList.toggle('ready', bothReady);
 }
 
 function restoreConversation(history) {
@@ -730,7 +775,7 @@ function uploadPdf(file) {
   }
   setPaperAttachmentCard({
     title: file.name,
-    state: 'Reading file…',
+    state: '读取文件中…',
     progress: 2,
     preparing: true,
     visible: true
@@ -751,7 +796,7 @@ function uploadPdf(file) {
     if (event.lengthComputable) {
       setPaperAttachmentCard({
         title: file.name,
-        state: 'Reading file…',
+        state: '读取文件中…',
         progress: Math.max(2, Math.min(10, (event.loaded / event.total) * 10)),
         preparing: true,
         visible: true
@@ -773,7 +818,7 @@ function uploadPdf(file) {
     post('dropPdf', { fileName: file.name, base64 });
     setPaperAttachmentCard({
       title: file.name,
-      state: 'Preparing PDF…',
+      state: '正在准备 PDF…',
       progress: 10,
       preparing: true,
       visible: true
@@ -787,7 +832,7 @@ async function renderPaperPreview(job) {
     if (paperAttachmentVisible && currentPaperHash === job.hash) {
       setPaperAttachmentCard({
         title: paperAttachmentTitle.textContent,
-        state: 'Rendering first page in background…',
+        state: '后台渲染首页中…',
         progress: 99,
         preparing: true,
         visible: true
@@ -1024,7 +1069,7 @@ document.addEventListener('drop', (event) => {
     const title = decodeURIComponent(uri.split(/[?#]/)[0].split('/').pop() || 'Paper.pdf');
     setPaperAttachmentCard({
       title,
-      state: 'Reading file…',
+      state: '读取文件中…',
       progress: 2,
       preparing: true,
       visible: true
@@ -1212,25 +1257,26 @@ window.addEventListener('message', (event) => {
       break;
     case 'paperStatus': {
       const target = document.getElementById('paper-status');
+      emptyPaperReady = Boolean(message.paper && message.paper.extractionStatus === 'ready');
       if (!message.paper) {
         currentPaperHash = undefined;
-        target.textContent = 'Not imported';
+        target.textContent = '未导入';
         setPaperAttachmentCard({ visible: false });
       } else {
         currentPaperHash = message.paper.hash;
-        const pages = message.paper.pageCount ? ` · ${message.paper.pageCount} pages` : '';
+        const pages = message.paper.pageCount ? ` · ${message.paper.pageCount} 页` : '';
         const analysis = [
-          message.paper.ocrPageCount ? `OCR ${message.paper.ocrPageCount}` : '',
-          message.paper.visualPageCount ? `visual ${message.paper.visualPageCount}` : ''
+          message.paper.ocrPageCount ? `OCR ${message.paper.ocrPageCount} 页` : '',
+          message.paper.visualPageCount ? `视觉精读 ${message.paper.visualPageCount} 页` : ''
         ].filter(Boolean).join(' · ');
         const state =
           message.paper.extractionStatus === 'ready'
-            ? 'Ready'
+            ? '就绪'
             : message.paper.extractionStatus === 'failed'
-              ? 'Preparation failed'
+              ? '准备失败'
               : message.paper.extractionStatus === 'paused'
-                ? 'Paused'
-                : 'Preparing…';
+                ? '已暂停'
+                : '准备中…';
         target.textContent = `${message.paper.title}${pages} · ${state}${analysis ? ` · ${analysis}` : ''}`;
         if (message.paper.attachmentPending) {
           const ready = message.paper.extractionStatus === 'ready';
@@ -1238,12 +1284,12 @@ window.addEventListener('message', (event) => {
           setPaperAttachmentCard({
             title: `${message.paper.title}.pdf`,
             state: ready
-              ? `Ready · background loaded${message.paper.pageCount ? ` · ${message.paper.pageCount} pages` : ''}`
+              ? `就绪 · 后台已加载${message.paper.pageCount ? ` · ${message.paper.pageCount} 页` : ''}`
               : failed
-                ? 'Preparation failed · remove and retry'
+                ? '准备失败 · 点 × 移除后重试'
                 : message.paper.extractionStatus === 'paused'
-                  ? 'Preparation paused'
-                  : 'Preparing PDF…',
+                  ? '准备已暂停'
+                  : '正在准备 PDF…',
             progress: ready ? 100 : failed ? 0 : 10,
             preparing: !ready && !failed && message.paper.extractionStatus !== 'paused',
             blocked: !ready,
@@ -1254,12 +1300,13 @@ window.addEventListener('message', (event) => {
         }
       }
       updateContextSummary();
+      refreshEmptyState();
       break;
     }
     case 'paperIndexProgress':
       if (message.hash === currentPaperHash) {
         document.getElementById('paper-status').textContent =
-          `Preparing PDF · ${message.page}/${message.pageCount}`;
+          `准备中 · ${message.page}/${message.pageCount}`;
         updateContextSummary();
         if (paperAttachmentVisible) {
           const percent = message.pageCount > 0
@@ -1267,7 +1314,7 @@ window.addEventListener('message', (event) => {
             : 10;
           setPaperAttachmentCard({
             title: paperAttachmentTitle.textContent,
-            state: `Preparing PDF · ${message.page}/${message.pageCount}`,
+            state: `准备中 · ${message.page}/${message.pageCount}`,
             progress: percent,
             preparing: true,
             visible: true
@@ -1277,7 +1324,7 @@ window.addEventListener('message', (event) => {
       break;
     case 'paperVisionProgress':
       if (message.hash === currentPaperHash) {
-        const label = message.mode === 'ocr' ? 'OCR and visual reading' : 'Visual reading';
+        const label = message.mode === 'ocr' ? 'OCR 与视觉精读' : '视觉精读';
         document.getElementById('paper-status').textContent =
           `${label} · ${message.completed}/${message.total}`;
         updateContextSummary();
@@ -1299,17 +1346,17 @@ window.addEventListener('message', (event) => {
       if (paperAttachmentVisible) {
         if (message.status === 'loading') {
           paperAttachmentPreparing = false;
-          paperAttachmentState.textContent = 'Paper ready · reader opening…';
+          paperAttachmentState.textContent = '论文就绪 · 阅读器打开中…';
           paperAttachmentProgress.classList.remove('ready');
           paperAttachmentProgress.classList.add('loading', 'opening');
         } else if (message.status === 'ready') {
           paperAttachmentPreparing = false;
-          paperAttachmentState.textContent = 'Ready · reader loaded';
+          paperAttachmentState.textContent = '就绪 · 阅读器已加载';
           paperAttachmentProgress.classList.remove('loading', 'opening');
           paperAttachmentProgress.classList.add('ready');
         } else {
           paperAttachmentPreparing = false;
-          paperAttachmentState.textContent = 'Paper ready · reader failed';
+          paperAttachmentState.textContent = '论文就绪 · 阅读器打开失败';
           paperAttachmentProgress.classList.remove('loading', 'opening', 'ready');
         }
         updateSendAvailability();
@@ -1318,7 +1365,7 @@ window.addEventListener('message', (event) => {
     case 'paperAttachmentStart':
       setPaperAttachmentCard({
         title: message.title,
-        state: 'Reading file…',
+        state: '读取文件中…',
         progress: 2,
         preparing: true,
         visible: true
@@ -1326,22 +1373,24 @@ window.addEventListener('message', (event) => {
       break;
     case 'indexStatus': {
       const labels = {
-        idle: 'Not scanned',
-        indexing: `Scanning · ${message.symbolCount} symbols`,
-        ready: `${message.symbolCount} symbols · Ready`,
-        stale: `${message.symbolCount} symbols · Stale`,
-        cancelled: `${message.symbolCount} symbols · Paused`
+        idle: '未扫描',
+        indexing: `扫描中 · ${message.symbolCount} 个符号`,
+        ready: `${message.symbolCount} 个符号 · 就绪`,
+        stale: `${message.symbolCount} 个符号 · 待刷新`,
+        cancelled: `${message.symbolCount} 个符号 · 已暂停`
       };
-      document.getElementById('index-status').textContent = labels[message.status] || `${message.symbolCount} symbols`;
+      document.getElementById('index-status').textContent = labels[message.status] || `${message.symbolCount} 个符号`;
+      emptyCodeReady = (message.status === 'ready' || message.status === 'stale') && message.symbolCount > 0;
       updateContextSummary();
+      refreshEmptyState();
       break;
     }
     case 'modelStatus':
       document.getElementById('model-status').textContent = message.model
         ? `${message.model.label || message.model.name} · ${message.model.reasoningEffort}${
-            message.model.insecureTransport ? ' · HTTP insecure' : ''
+            message.model.insecureTransport ? ' · HTTP 未加密' : ''
           }`
-        : 'Not configured';
+        : '未配置';
       const modelLabel = document.getElementById('model-label');
       if (modelLabel) {
         modelLabel.textContent = message.model
@@ -1352,7 +1401,7 @@ window.addEventListener('message', (event) => {
       break;
     case 'mappingStatus': {
       const target = document.getElementById('mapping-status');
-      if (target) target.textContent = `${Number(message.count) || 0} saved`;
+      if (target) target.textContent = `${Number(message.count) || 0} 条`;
       updateContextSummary();
       break;
     }
@@ -1360,8 +1409,8 @@ window.addEventListener('message', (event) => {
       const target = document.getElementById('example-status');
       if (target) {
         target.textContent = message.example
-          ? `${message.example.title} · ${Number(message.example.steps) || 0} steps`
-          : 'Not established';
+          ? `${message.example.title} · ${Number(message.example.steps) || 0} 步`
+          : '未建立';
       }
       updateContextSummary();
       break;
@@ -1381,10 +1430,12 @@ window.addEventListener('message', (event) => {
       for (const button of document.querySelectorAll('[data-action]')) {
         button.disabled = isBusy;
       }
-      stop.hidden = !canCancel;
-      busyLabel.textContent = message.busy ? 'Thinking' : '';
+      stop.hidden = !isBusy;
+      stop.disabled = !canCancel;
+      stop.title = canCancel ? '停止当前回答' : '当前阶段暂不可停止';
+      busyLabel.textContent = message.busy ? '思考中' : '';
       if (message.busy) {
-        showThinking('Thinking');
+        showThinking('思考中');
       } else {
         hideThinking();
       }

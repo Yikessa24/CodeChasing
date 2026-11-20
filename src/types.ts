@@ -129,6 +129,7 @@ export interface CallGraph {
   totalProjectSymbols?: number;
   unresolvedCallCount?: number;
   truncated?: boolean;
+  coreSelection?: 'model' | 'heuristic';
 }
 
 export interface TensorTraceStep {

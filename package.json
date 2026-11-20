@@ -2,7 +2,7 @@
   "name": "codechasing",
   "displayName": "CodeChasing",
   "description": "Evidence-grounded research paper and code understanding inside VS Code.",
-  "version": "0.30.3",
+  "version": "0.30.6",
   "publisher": "codechasing",
   "license": "MIT",
   "engines": {
@@ -25,61 +25,61 @@
     "commands": [
       {
         "command": "codeChasing.importPaper",
-        "title": "CodeChasing: Import Research Paper"
+        "title": "CodeChasing: 导入论文 PDF"
       },
       {
         "command": "codeChasing.openPaper",
-        "title": "CodeChasing: Open Current Paper"
+        "title": "CodeChasing: 打开当前论文"
       },
       {
         "command": "codeChasing.askPaper",
-        "title": "CodeChasing: Ask About Paper and Code"
+        "title": "CodeChasing: 就论文与代码提问"
       },
       {
         "command": "codeChasing.analyzeSelection",
-        "title": "CodeChasing: Ask or Trace Selected Code",
-        "shortTitle": "Ask selected code",
+        "title": "CodeChasing: 对选中代码提问或追踪样例",
+        "shortTitle": "提问选中代码",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "codeChasing.indexWorkspace",
-        "title": "CodeChasing: Index Workspace Symbols"
+        "title": "CodeChasing: 扫描工作区代码符号"
       },
       {
         "command": "codeChasing.openCallGraph",
-        "title": "CodeChasing: Open Project Call Graph"
+        "title": "CodeChasing: 打开项目调用图"
       },
       {
         "command": "codeChasing.manageMappings",
-        "title": "CodeChasing: Review Paper-Code Mappings"
+        "title": "CodeChasing: 查看与审核论文↔代码对应关系"
       },
       {
         "command": "codeChasing.showPersistentExample",
-        "title": "CodeChasing: View Running Example and Tensor Trace"
+        "title": "CodeChasing: 查看贯穿样例与张量形状追踪"
       },
       {
         "command": "codeChasing.configureProvider",
-        "title": "CodeChasing: Configure Model Provider"
+        "title": "CodeChasing: 配置模型提供商"
       },
       {
         "command": "codeChasing.testProvider",
-        "title": "CodeChasing: Test Model Connection"
+        "title": "CodeChasing: 测试模型连接"
       },
       {
         "command": "codeChasing.moveToRight",
-        "title": "CodeChasing: Move Assistant to Right Side"
+        "title": "CodeChasing: 把助手移到右侧"
       },
       {
         "command": "codeChasing.startWalkthrough",
-        "title": "CodeChasing: Explain Paper and Code from Start to Finish"
+        "title": "CodeChasing: 从头到尾讲解论文与代码"
       },
       {
         "command": "codeChasing.manageIndexes",
-        "title": "CodeChasing: Manage Paper and Code Indexes"
+        "title": "CodeChasing: 管理论文与代码索引"
       },
       {
         "command": "codeChasing.openConversationHistory",
-        "title": "CodeChasing: Open Conversation History"
+        "title": "CodeChasing: 打开历史对话"
       }
     ],
     "menus": {
@@ -120,7 +120,7 @@
         {
           "type": "webview",
           "id": "codeChasing.assistant",
-          "name": "Research Assistant"
+          "name": "研究助手"
         }
       ]
     },
@@ -135,17 +135,17 @@
             "gemini"
           ],
           "default": "openai-compatible",
-          "description": "Model API protocol. Ollama and LM Studio use openai-compatible."
+          "description": "模型 API 协议。Ollama 与 LM Studio 选 openai-compatible。"
         },
         "codeChasing.baseUrl": {
           "type": "string",
           "default": "https://api.openai.com/v1",
-          "description": "Base URL for the selected model provider."
+          "description": "所选模型提供商的 base URL。"
         },
         "codeChasing.model": {
           "type": "string",
           "default": "gpt-4.1-mini",
-          "description": "Model name sent to the provider."
+          "description": "发送给提供商的模型名。"
         },
         "codeChasing.modelChoices": {
           "type": "array",
@@ -176,7 +176,7 @@
             "qwen-plus",
             "qwen3-coder-plus"
           ],
-          "description": "Extra model names considered by the model picker, on top of the provider's model list and the current model. Every candidate is probed with the configured API key first; only models that pass the probe are offered. Edit to match your gateway."
+          "description": "模型选择器额外考虑的模型名（叠加在提供商模型列表与当前模型之上）。每个候选都会先用已配置的 API key 探测权限，只展示探测通过的模型。可按自己的网关修改。"
         },
         "codeChasing.reasoningEffort": {
           "type": "string",
@@ -189,58 +189,58 @@
             "xhigh"
           ],
           "enumDescriptions": [
-            "Let the provider or model choose its default reasoning effort.",
-            "Use the smallest supported reasoning effort.",
-            "Prefer lower latency and cost.",
-            "Balance reasoning depth, latency, and cost.",
-            "Prefer deeper reasoning.",
-            "Use extra-high reasoning where the model supports it."
+            "由提供商或模型自选默认推理强度。",
+            "使用支持的最小推理强度。",
+            "优先更低延迟与成本。",
+            "平衡推理深度、延迟与成本。",
+            "优先更深入推理。",
+            "模型支持时使用超高推理强度。"
           ],
           "default": "auto",
-          "description": "Reasoning effort sent to compatible models. Unsupported explicit values may be rejected by the provider."
+          "description": "发送给兼容模型的推理强度。不支持的显式取值可能被提供商拒绝。"
         },
         "codeChasing.maxRepositoryFiles": {
           "type": "number",
           "default": 5000,
           "minimum": 10,
           "maximum": 20000,
-          "description": "Maximum source files included in the initial symbol scan and compact catalogue. Model-directed text search can still inspect all non-dependency workspace files."
+          "description": "初始符号扫描与精简目录纳入的最大源码文件数。模型自主文本检索仍可检查所有非依赖工作区文件。"
         },
         "codeChasing.maxEvidenceChunks": {
           "type": "number",
           "default": 6,
           "minimum": 2,
           "maximum": 12,
-          "description": "Maximum paper evidence chunks sent with each question."
+          "description": "每次提问随附的论文证据块上限。"
         },
         "codeChasing.rerankEvidence": {
           "type": "boolean",
           "default": true,
-          "description": "Re-rank retrieved paper evidence with the configured model before answering (listwise, bounded to the evidence limit). Disable to keep lexical ranking only."
+          "description": "回答前用已配置模型对检索到的论文证据重排序（listwise，不超过证据上限）。关闭则仅保留词法排序。"
         },
         "codeChasing.maxExplorationRounds": {
           "type": "number",
           "default": 8,
           "minimum": 1,
           "maximum": 20,
-          "description": "Maximum model-directed search/read rounds before an answer. Increase this for unusually large or cross-module research questions."
+          "description": "回答前模型自主检索/阅读的最大轮数。超大仓库或跨模块研究问题可调高。"
         },
         "codeChasing.maxVisualPages": {
           "type": "number",
           "default": 6,
           "minimum": 1,
           "maximum": 12,
-          "description": "Maximum PDF page images sent for one visual paper question or guided walkthrough."
+          "description": "一次视觉论文提问或贯穿讲解最多发送的 PDF 页图数。"
         },
         "codeChasing.sendCodeByDefault": {
           "type": "boolean",
           "default": false,
-          "description": "Retrieve related repository code for ordinary chat. Explicit code questions and selected editor code may still retrieve relevant code when this is disabled."
+          "description": "普通聊天也检索相关仓库代码。关闭时，明确的代码问题与编辑器选中代码仍可能检索相关代码。"
         },
         "codeChasing.confirmContextBeforeSend": {
           "type": "boolean",
           "default": false,
-          "description": "Show a paper/code context confirmation before each contextual request. Disabled by default for uninterrupted chat."
+          "description": "每次带上下文的请求前先确认论文/代码上下文。默认关闭以保持聊天连贯。"
         }
       }
     }

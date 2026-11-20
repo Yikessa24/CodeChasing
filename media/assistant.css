@@ -228,6 +228,85 @@ button:disabled {
   line-height: 1.55;
 }
 
+#empty-state .empty-problem {
+  max-width: 320px;
+}
+
+#empty-state .empty-cta {
+  margin-top: 16px;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+#empty-state .empty-cta.ready {
+  box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+}
+
+#empty-state .empty-steps {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
+  max-width: 340px;
+  margin: 12px auto 0;
+}
+
+#empty-state .empty-step {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-textLink-foreground);
+  font-size: 12px;
+}
+
+#empty-state .empty-step:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+#empty-state .empty-step.done {
+  color: var(--vscode-testing-iconPassed, #388a34);
+}
+
+#empty-state .empty-step-arrow {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+#empty-state .empty-cta-note {
+  margin: 8px auto 0;
+  color: var(--vscode-testing-iconPassed, #388a34);
+  font-size: 11px;
+}
+
+#empty-state .empty-sample {
+  display: block;
+  max-width: 320px;
+  margin: 12px auto 0;
+  padding: 7px 10px;
+  border: 1px dashed var(--vscode-focusBorder);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font-size: 12px;
+  text-align: left;
+}
+
+#empty-state .empty-sample:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+#empty-state .empty-sample[hidden] {
+  display: none;
+}
+
+#empty-state .empty-alt {
+  margin: 12px auto 0;
+  font-size: 11px;
+}
+
 .message {
   width: fit-content;
   max-width: 88%;
@@ -828,6 +907,31 @@ textarea:focus {
 .icon-button:hover {
   color: var(--vscode-foreground);
   background: var(--vscode-toolbar-hoverBackground);
+}
+
+.toolbar-divider {
+  flex: none;
+  width: 1px;
+  height: 16px;
+  margin: 0 2px;
+  background: var(--vscode-panel-border);
+}
+
+.icon-button.core-action {
+  width: auto;
+  gap: 4px;
+  padding: 0 7px;
+  border-color: var(--vscode-panel-border);
+  color: var(--vscode-textLink-foreground);
+  font-size: 13px;
+}
+
+.icon-button.core-action span {
+  font-size: 11px;
+}
+
+.icon-button.core-action:hover {
+  color: var(--vscode-textLink-activeForeground, var(--vscode-foreground));
 }
 
 .model-button {

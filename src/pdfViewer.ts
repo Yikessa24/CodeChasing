@@ -276,7 +276,7 @@ export class PdfViewer implements vscode.Disposable {
     );
     const scriptNonce = nonce();
     return `<!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -288,12 +288,12 @@ export class PdfViewer implements vscode.Disposable {
     <header>
       <strong title="${escapeHtml(paper.title)}">${escapeHtml(paper.title)}</strong>
       <div id="viewer-controls" aria-label="PDF controls">
-        <button id="zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+        <button id="zoom-out" title="缩小" aria-label="缩小">−</button>
         <span id="zoom-label">100%</span>
-        <button id="zoom-in" title="Zoom in" aria-label="Zoom in">+</button>
-        <button id="fit-width" title="Fit page width" aria-label="Fit page width">Fit</button>
+        <button id="zoom-in" title="放大" aria-label="放大">+</button>
+        <button id="fit-width" title="适应页宽" aria-label="适应页宽">Fit</button>
       </div>
-      <span id="status">Loading…</span>
+      <span id="status">加载中…</span>
     </header>
     <main id="pages"></main>
     <button id="ask-pdf-selection" hidden>询问这段</button>
